@@ -273,7 +273,7 @@ def safe_generate_response(prompt,
   return fail_safe_response
 
 
-def get_embedding(text, model="text-embedding-ada-002"):
+def get_openai_embedding(text, model=embedding_model):
   text = text.replace("\n", " ")
   if not text: 
     text = "this is blank"
@@ -309,23 +309,3 @@ if __name__ == '__main__':
                                  True)
 
   print (output)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

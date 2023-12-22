@@ -15,6 +15,7 @@ from global_methods import *
 from persona.prompt_template.run_gpt_prompt import *
 from persona.cognitive_modules.retrieve import *
 from persona.cognitive_modules.converse import *
+from persona.prompt_template.embedding import get_embedding
 
 ##############################################################################
 # CHAPTER 2: Generate

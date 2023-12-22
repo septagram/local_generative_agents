@@ -16,8 +16,13 @@ In the `reverie/backend_server` folder (where `reverie.py` is located), create a
 ```
 # Copy and paste your OpenAI API Key
 openai_api_key = "<Your OpenAI API>"
+# openai_api_base = "http://localhost:11000/v1"
+
 # Put your name
 key_owner = "<Name>"
+
+embedding_is_local = True
+embedding_model = "jinaai/jina-embeddings-v2-base-en"
 
 maze_assets_loc = "../../environment/frontend_server/static_dirs/assets"
 env_matrix = f"{maze_assets_loc}/the_ville/matrix"

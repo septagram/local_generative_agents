@@ -11,6 +11,7 @@ from operator import itemgetter
 from global_methods import *
 from persona.prompt_template.gpt_structure import *
 from persona.prompt_template.run_gpt_prompt import *
+from persona.prompt_template.embedding import get_embedding
 
 def generate_poig_score(persona, event_type, description): 
   if "is idle" in description: 
