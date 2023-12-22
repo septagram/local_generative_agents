@@ -2,6 +2,8 @@ reverie/backend_server/utils.py
 frontend_server/settings/local.py
 storage/*
 static_dirs/*
+/environment/frontend_server/storage
+/environment/frontend_server/temp_storage
 
 !storage/base_the_ville_isabella_maria_klaus/*
 !storage/base_the_ville_n25/*
@@ -84,6 +86,7 @@ target/
 
 # pyenv
 .python-version
+/ai-town-env
 
 # celery beat schedule file
 celerybeat-schedule
