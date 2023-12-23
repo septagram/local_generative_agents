@@ -1,5 +1,3 @@
-
-
 # Generative Agents: Interactive Simulacra of Human Behavior 
 
 <p align="center" width="100%">
@@ -31,6 +29,10 @@ env_visuals = f"{maze_assets_loc}/the_ville/visuals"
 fs_storage = "../../environment/frontend_server/storage"
 fs_temp_storage = "../../environment/frontend_server/temp_storage"
 
+# startup_fork_simulation = "base_the_ville_isabella_maria_klaus"
+# startup_name_simulation = "test-isabella-lms"
+# startup_command = "run 1"
+
 collision_block_id = "32125"
 
 # Verbose 
@@ -58,16 +60,16 @@ Open up another command line (the one you used in Step 1 should still be running
 This will start the simulation server. A command-line prompt will appear, asking the following: "Enter the name of the forked simulation: ". To start a 3-agent simulation with Isabella Rodriguez, Maria Lopez, and Klaus Mueller, type the following:
     
     base_the_ville_isabella_maria_klaus
-The prompt will then ask, "Enter the name of the new simulation: ". Type any name to denote your current simulation (e.g., just "test-simulation" will do for now).
+If you don't want to be asked this question every time, you can uncomment and modify the `startup_fork_simulation` option in the `utils.py` file. The default value is "base_the_ville_isabella_maria_klaus". The prompt will then ask, "Enter the name of the new simulation: ". Type any name to denote your current simulation (e.g., just "test-simulation" will do for now).
 
     test-simulation
-Keep the simulator server running. At this stage, it will display the following prompt: "Enter option: "
+If you don't want to be asked this question every time, you can uncomment and modify the `startup_name_simulation` option in the `utils.py` file. The default value is "test-isabella-lms". Keep the simulator server running. At this stage, it will display the following prompt: "Enter option: "
 
 ### Step 3. Running and Saving the Simulation
 On your browser, navigate to [http://localhost:8000/simulator_home](http://localhost:8000/simulator_home). You should see the map of Smallville, along with a list of active agents on the map. You can move around the map using your keyboard arrows. Please keep this tab open. To run the simulation, type the following command in your simulation server in response to the prompt, "Enter option":
 
     run <step-count>
-Note that you will want to replace `<step-count>` above with an integer indicating the number of game steps you want to simulate. For instance, if you want to simulate 100 game steps, you should input `run 100`. One game step represents 10 seconds in the game.
+If you don't want to be asked this question every time, you can uncomment and modify the `startup_command` option in the `utils.py` file. The default value is "run 1". Note that you will want to replace `<step-count>` above with an integer indicating the number of game steps you want to simulate. For instance, if you want to simulate 100 game steps, you should input `run 100`. One game step represents 10 seconds in the game.
 
 
 Your simulation should be running, and you will see the agents moving on the map in your browser. Once the simulation finishes running, the "Enter option" prompt will re-appear. At this point, you can simulate more steps by re-entering the run command with your desired game steps, exit the simulation without saving by typing `exit`, or save and exit by typing `fin`.

@@ -432,8 +432,14 @@ class ReverieServer:
     # <sim_folder> points to the current simulation folder.
     sim_folder = f"{fs_storage}/{self.sim_code}"
 
+    first_run = True
+
     while True: 
-      sim_command = input("Enter option: ")
+      if first_run and 'startup_command' in globals():
+          sim_command = globals()['startup_command']
+      else:
+          sim_command = input("Enter option: ")
+      first_run = False
       sim_command = sim_command.strip()
       ret_str = ""
 
@@ -607,8 +613,15 @@ if __name__ == '__main__':
   #                    "July1_the_ville_isabella_maria_klaus-step-3-21")
   # rs.open_server()
 
-  origin = input("Enter the name of the forked simulation: ").strip()
-  target = input("Enter the name of the new simulation: ").strip()
+  if 'startup_fork_simulation' in globals():
+      origin = globals()['startup_fork_simulation']
+  else:
+      origin = input("Enter the name of the forked simulation: ").strip()
+
+  if 'startup_name_simulation' in globals():
+      target = globals()['startup_name_simulation']
+  else:
+      target = input("Enter the name of the new simulation: ").strip()
 
   rs = ReverieServer(origin, target)
   rs.open_server()
