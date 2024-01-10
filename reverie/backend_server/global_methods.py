@@ -18,6 +18,8 @@ import shutil, errno
 
 from os import listdir
 
+from utils import fs_overwrite_existing_directories
+
 def create_folder_if_not_there(curr_path): 
   """
   Checks if a folder in the curr_path exists. If it does not exist, creates
@@ -211,6 +213,7 @@ def std(list_of_val):
 def copyanything(src, dst):
   """
   Copy over everything in the src folder to dst folder. 
+  If fs_overwrite_existing_directories is True and the dst folder exists, it will be removed before copying.
   ARGS:
     src: address of the source folder  
     dst: address of the destination folder  
@@ -218,11 +221,14 @@ def copyanything(src, dst):
     None
   """
   try:
+    if fs_overwrite_existing_directories and os.path.exists(dst):
+      shutil.rmtree(dst)
     shutil.copytree(src, dst)
-  except OSError as exc: # python >2.5
+  except OSError as exc:
     if exc.errno in (errno.ENOTDIR, errno.EINVAL):
       shutil.copy(src, dst)
-    else: raise
+    else:
+      raise
 
 
 if __name__ == '__main__':
