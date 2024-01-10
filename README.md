@@ -19,8 +19,10 @@ openai_api_key = "<Your OpenAI API>"
 # Put your name
 key_owner = "<Name>"
 
-embedding_is_local = True
+inference_model_strong = "TheBloke/zephyr-7B-beta-GGUF"
+inference_model_cheap = "TheBloke/phi-2-GGUF"
 embedding_model = "jinaai/jina-embeddings-v2-base-en"
+embedding_is_local = True
 
 maze_assets_loc = "../../environment/frontend_server/static_dirs/assets"
 env_matrix = f"{maze_assets_loc}/the_ville/matrix"
@@ -28,10 +30,12 @@ env_visuals = f"{maze_assets_loc}/the_ville/visuals"
 
 fs_storage = "../../environment/frontend_server/storage"
 fs_temp_storage = "../../environment/frontend_server/temp_storage"
+fs_overwrite_existing_directories = False
 
 # startup_fork_simulation = "base_the_ville_isabella_maria_klaus"
 # startup_name_simulation = "test-isabella-lms"
 # startup_command = "run 1"
+strict_errors = False
 
 collision_block_id = "32125"
 

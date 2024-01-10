@@ -1,12 +1,10 @@
-wake_up_hour_v1.txt
+Let's consider {{$firstname}}:
 
-Variables: 
-!<INPUT 0>! -- Identity Stable Set
-!<INPUT 1>! -- Lifestyle
-!<INPUT 2>! -- Persona first names
+{{$iss}}
 
-<commentblockmarker>###</commentblockmarker>
-!<INPUT 0>!
+What will be the {{$lifestyle}} {{$firstname}}'s wake up time today?
 
-In general, !<INPUT 1>!
-!<INPUT 2>!'s wake up hour:
+Answer only with the actual time, without any reasoning or deliberation.
+The time must be in the 24-hour format, like this: H:mm (H for hours, mm for minutes).
+We must not include am/pm, nor anything aside the actual time in our answer.
+After that, end the answer immediately.

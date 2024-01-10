@@ -7,13 +7,25 @@ Description: Wrapper functions for calling OpenAI APIs.
 import json
 import random
 import openai
-import time 
+import time
+import os
+import semantic_kernel as sk
+from openai import AsyncOpenAI
+
+from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
+from persona.prompt_template.LuminariaChatService import LuminariaChatService
 
 from utils import *
 
 openai.api_key = openai_api_key
 if 'openai_api_base' in globals():
-    openai.api_base = openai_api_base
+    openai.base_url = openai_api_base
+
+base_url = openai_api_base if 'openai_api_base' in globals() else None
+
+kernel = sk.Kernel()
+client = AsyncOpenAI(api_key=openai_api_key, base_url=base_url)
+kernel.add_chat_service("strong", LuminariaChatService(inference_model_strong, async_client=client))
 
 def temp_sleep(seconds=0.1):
   time.sleep(seconds)

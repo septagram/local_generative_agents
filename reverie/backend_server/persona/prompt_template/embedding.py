@@ -1,6 +1,6 @@
 from transformers import AutoModel
 
-from gpt_structure import get_openai_embedding
+from persona.prompt_template.gpt_structure import get_openai_embedding
 from utils import *
 
 embedding_model_instances = {}

@@ -9,12 +9,17 @@ import re
 import datetime
 import sys
 import ast
+import pprint
+from termcolor import colored
 
 sys.path.append('../../')
 
 from global_methods import *
 from persona.prompt_template.gpt_structure import *
 from persona.prompt_template.print_prompt import *
+
+kernel.set_default_chat_service("strong")
+skill = kernel.import_semantic_skill_from_directory("persona/prompt_template", "v4_sk")
 
 def get_random_alphanumeric(i=6, j=6): 
   """
@@ -30,58 +35,90 @@ def get_random_alphanumeric(i=6, j=6):
   k = random.randint(i, j)
   x = ''.join(random.choices(string.ascii_letters + string.digits, k=k))
   return x
+from typing import Callable, Dict, Optional, TypeVar
 
+# Define type variables
+ArgsType = TypeVar('ArgsType')  # The type of the arguments
+ContextType = TypeVar('ContextType')  # The type of the arguments
+ReturnType = TypeVar('ReturnType')  # The type of the return value
+
+def create_prompt_runner(
+  skill: Dict[str, Callable], 
+  semantic_func_name: str, 
+  context_prep: Optional[Callable[..., Dict[str, ContextType]]] = None, 
+  validator: Optional[Callable[[str], Optional[str]]] = None, 
+  extractor: Optional[Callable[[str], ReturnType]] = None, 
+  fallback: Optional[Callable[..., ReturnType]] = None
+) -> Callable[..., ReturnType]:
+  def runner(*args: ArgsType) -> ReturnType:
+    # Step 1: Prepare the context
+    if context_prep:
+      context_dict = context_prep(*args)
+    else:
+      context_dict = args
+
+    # Step 2: Create the context
+    context = kernel.create_new_context()
+    for key, value in context_dict.items():
+      context[key] = value
+
+    try:
+      # Step 3: Invoke the semantic function
+      llm_output = str(skill[semantic_func_name](context=context))
+      print(
+        ''.join([
+          "Semantic function: ",
+          colored(semantic_func_name, 'yellow'),
+          " LLM output: ",
+          colored(llm_output, 'light_blue'),
+        ])
+      )
+
+      # Step 4: Validate the output
+      if validator:
+        validation_error = validator(llm_output)
+        print('validation successful')
+        if validation_error is not None:
+          raise ValueError(validation_error)
+
+      # Step 5: Extract the data from the output
+      if extractor:
+        final_output = extractor(llm_output)
+        if final_output != llm_output:
+          print(colored(f"Final output: {final_output}", 'light_green'))
+
+      # Step 7: Return the output
+      return final_output if extractor else llm_output
+
+    except Exception as e:
+      # Log the error
+      print(colored(f"Error in interaction with {semantic_func_name}: {str(e)}", 'red'))
+      if strict_errors:
+        raise e
+
+      # Step 8: Invoke the fallback function
+      if fallback:
+        return fallback(*args)
+      else:
+        return None
+
+  return runner
 
 ##############################################################################
 # CHAPTER 1: Run GPT Prompt
 ##############################################################################
 
-def run_gpt_prompt_wake_up_hour(persona, test_input=None, verbose=False): 
-  """
-  Given the persona, returns an integer that indicates the hour when the 
-  persona wakes up.  
-
-  INPUT: 
-    persona: The Persona class instance 
-  OUTPUT: 
-    integer for the wake up hour.
-  """
-  def create_prompt_input(persona, test_input=None): 
-    if test_input: return test_input
-    prompt_input = [persona.scratch.get_str_iss(),
-                    persona.scratch.get_str_lifestyle(),
-                    persona.scratch.get_str_firstname()]
-    return prompt_input
-
-  def __func_clean_up(gpt_response, prompt=""):
-    cr = int(gpt_response.strip().lower().split("am")[0])
-    return cr
-  
-  def __func_validate(gpt_response, prompt=""): 
-    try: __func_clean_up(gpt_response, prompt="")
-    except: return False
-    return True
-
-  def get_fail_safe(): 
-    fs = 8
-    return fs
-
-  gpt_param = {"engine": "text-davinci-002", "max_tokens": 5, 
-             "temperature": 0.8, "top_p": 1, "stream": False,
-             "frequency_penalty": 0, "presence_penalty": 0, "stop": ["\n"]}
-  prompt_template = "persona/prompt_template/v2/wake_up_hour_v1.txt"
-  prompt_input = create_prompt_input(persona, test_input)
-  prompt = generate_prompt(prompt_input, prompt_template)
-  fail_safe = get_fail_safe()
-
-  output = safe_generate_response(prompt, gpt_param, 5, fail_safe,
-                                   __func_validate, __func_clean_up)
-  
-  if debug or verbose: 
-    print_run_prompts(prompt_template, persona, gpt_param, 
-                      prompt_input, prompt, output)
-    
-  return output, [output, prompt, gpt_param, prompt_input, fail_safe]
+run_gpt_prompt_wake_up_hour = create_prompt_runner(
+  skill, "wake_up_hour_v1",
+  context_prep=lambda persona: {
+    "iss": persona.scratch.get_str_iss(),
+    "lifestyle": persona.scratch.get_str_lifestyle(),
+    "firstname": persona.scratch.get_str_firstname()
+  },
+  validator=lambda output: "Invalid time format: " + output if re.search(r"^[012]?\d:\d\d\b", output) is None else None,
+  extractor=lambda output: re.search(r"^[012]?\d:\d\d\b", output).group(0),
+  fallback=lambda persona: "08:00"
+)
 
 
 def run_gpt_prompt_daily_plan(persona, 
