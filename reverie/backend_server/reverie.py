@@ -27,6 +27,7 @@ import math
 import os
 import shutil
 import traceback
+import asyncio
 
 from selenium import webdriver
 
@@ -414,7 +415,7 @@ class ReverieServer:
       time.sleep(self.server_sleep)
 
 
-  def open_server(self): 
+  async def open_server(self): 
     """
     Open up an interactive terminal prompt that lets you run the simulation 
     step by step and probe agent state. 
@@ -624,56 +625,7 @@ if __name__ == '__main__':
       target = input("Enter the name of the new simulation: ").strip()
 
   rs = ReverieServer(origin, target)
-  rs.open_server()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+  # Create a new event loop and set it for the current context
+  loop = asyncio.new_event_loop()
+  asyncio.set_event_loop(loop)
+  loop.run_until_complete(rs.open_server())

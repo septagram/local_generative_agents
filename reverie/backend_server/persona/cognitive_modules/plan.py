@@ -66,7 +66,7 @@ def generate_first_daily_plan(persona, wake_up_hour):
      'have dinner at 6:00 pm', 'watch TV from 7:00 pm to 8:00 pm']
   """
   if debug: print ("GNS FUNCTION: <generate_first_daily_plan>")
-  return run_gpt_prompt_daily_plan(persona, wake_up_hour)[0]
+  return run_gpt_prompt_daily_plan(persona, wake_up_hour)
 
 
 def generate_hourly_schedule(persona, wake_up_hour): 
