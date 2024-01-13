@@ -9,8 +9,14 @@ import random
 import openai
 import time
 import os
+import re
 import semantic_kernel as sk
+
+from typing import Callable, Dict, Optional, TypeVar
 from openai import AsyncOpenAI
+from asyncio import get_event_loop
+from termcolor import colored
+from semantic_kernel import SKFunctionBase
 
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 from persona.prompt_template.LuminariaChatService import LuminariaChatService
@@ -26,6 +32,80 @@ base_url = openai_api_base if 'openai_api_base' in globals() else None
 kernel = sk.Kernel()
 client = AsyncOpenAI(api_key=openai_api_key, base_url=base_url)
 kernel.add_chat_service("strong", LuminariaChatService(inference_model_strong, async_client=client))
+
+# Define type variables
+ArgsType = TypeVar('ArgsType')  # The type of the arguments
+ContextType = TypeVar('ContextType')  # The type of the arguments
+ReturnType = TypeVar('ReturnType')  # The type of the return value
+
+def create_prompt_runner(
+  semantic_function: SKFunctionBase, 
+  context_prep: Optional[Callable[..., Dict[str, ContextType]]] = None, 
+  validator: Optional[Callable[[str], Optional[str]]] = None, 
+  extractor: Optional[Callable[[str], ReturnType]] = None, 
+  fallback: Optional[Callable[..., ReturnType]] = None,
+  retries: Optional[int] = 3,
+) -> Callable[..., ReturnType]:
+  def runner(*args: ArgsType) -> ReturnType:
+    # Step 1: Prepare the context
+    context = kernel.create_new_context()
+    if context_prep:
+      context_dict = context_prep(*args)
+      for key, value in context_dict.items():
+        context[key] = value
+
+    llm_output = final_output = last_error = None
+
+    for i in range(retries):
+      llm_output = ""
+      final_output = None
+      last_error = None
+      
+      try:
+        curr_time = re.search(r'\b(\d\d:\d\d):\d\d$', str(get_event_loop().reverie_server.curr_time)).group(1)
+        retry_string = "" if i == 0 else f" Retry: {i}"
+        print(
+          ' '.join([
+            f"[{colored(curr_time, 'dark_grey')}{colored(retry_string, 'red')}]",
+            "Semantic function:",
+            colored(semantic_function.name, 'yellow'),
+          ])
+        )
+
+        # Step 3: Invoke the semantic function
+        llm_output = str(semantic_function(context=context))
+
+        # Step 4: Validate the output
+        if validator:
+          validation_error = validator(llm_output)
+          if validation_error is not None:
+            raise ValueError(validation_error)
+
+        # Step 5: Extract the data from the output
+        if extractor:
+          final_output = extractor(llm_output)
+        else:
+          final_output = llm_output
+        break
+
+      except Exception as e:
+        last_error = e
+
+    print(colored(llm_output, 'light_blue'))
+    if last_error is None:
+      if final_output != llm_output:
+        print(colored(f"Final output: {final_output}", 'light_green'))
+      return final_output
+    else:
+      print(colored(f"Error in interaction with {semantic_function.name}: {str(last_error)}", 'red'))
+      if strict_errors:
+        raise last_error
+      if fallback:
+        return fallback(*args)
+      else:
+        return None
+
+  return runner
 
 def temp_sleep(seconds=0.1):
   time.sleep(seconds)

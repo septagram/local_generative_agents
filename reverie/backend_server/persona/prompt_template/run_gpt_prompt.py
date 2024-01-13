@@ -10,8 +10,6 @@ import datetime
 import sys
 import ast
 import pprint
-from asyncio import get_event_loop
-from termcolor import colored
 
 sys.path.append('../../')
 
@@ -36,94 +34,19 @@ def get_random_alphanumeric(i=6, j=6):
   k = random.randint(i, j)
   x = ''.join(random.choices(string.ascii_letters + string.digits, k=k))
   return x
-from typing import Callable, Dict, Optional, TypeVar
-
-# Define type variables
-ArgsType = TypeVar('ArgsType')  # The type of the arguments
-ContextType = TypeVar('ContextType')  # The type of the arguments
-ReturnType = TypeVar('ReturnType')  # The type of the return value
-
-def create_prompt_runner(
-  skill: Dict[str, Callable], 
-  semantic_func_name: str, 
-  context_prep: Optional[Callable[..., Dict[str, ContextType]]] = None, 
-  validator: Optional[Callable[[str], Optional[str]]] = None, 
-  extractor: Optional[Callable[[str], ReturnType]] = None, 
-  fallback: Optional[Callable[..., ReturnType]] = None
-) -> Callable[..., ReturnType]:
-  def runner(*args: ArgsType) -> ReturnType:
-    # Step 1: Prepare the context
-    if context_prep:
-      context_dict = context_prep(*args)
-    else:
-      context_dict = args
-
-    # Step 2: Create the context
-    context = kernel.create_new_context()
-    for key, value in context_dict.items():
-      context[key] = value
-
-    try:
-      # Step 3: Invoke the semantic function
-      llm_output = str(skill[semantic_func_name](context=context))
-      # print(f"LLM output type: {type(llm_output).__name__}")
-      # print("LLM output properties:")
-      # pprint.pprint(vars(llm_output))
-
-      print(get_event_loop().reverie_server.curr_time)
-      curr_time = re.search(r'\b(\d\d:\d\d):\d\d$', str(get_event_loop().reverie_server.curr_time)).group(1)
-      print(
-        ' '.join([
-          f"[{colored(curr_time, 'dark_grey')}]",
-          "Semantic function:",
-          colored(semantic_func_name, 'yellow'),
-          "LLM output:",
-          colored(llm_output, 'light_blue'),
-        ])
-      )
-
-      # Step 4: Validate the output
-      if validator:
-        validation_error = validator(llm_output)
-        print('validation successful')
-        if validation_error is not None:
-          raise ValueError(validation_error)
-
-      # Step 5: Extract the data from the output
-      if extractor:
-        final_output = extractor(llm_output)
-        if final_output != llm_output:
-          print(colored(f"Final output: {final_output}", 'light_green'))
-
-      # Step 7: Return the output
-      return final_output if extractor else llm_output
-
-    except Exception as e:
-      # Log the error
-      print(colored(f"Error in interaction with {semantic_func_name}: {str(e)}", 'red'))
-      if strict_errors:
-        raise e
-
-      # Step 8: Invoke the fallback function
-      if fallback:
-        return fallback(*args)
-      else:
-        return None
-
-  return runner
 
 ##############################################################################
 # CHAPTER 1: Run GPT Prompt
 ##############################################################################
 
 run_gpt_prompt_wake_up_hour = create_prompt_runner(
-  skill, "wake_up_hour_v1",
+  skill["wake_up_hour_v1"],
   context_prep=lambda persona: {
     "iss": persona.scratch.get_str_iss(),
     "lifestyle": persona.scratch.get_str_lifestyle(),
     "firstname": persona.scratch.get_str_firstname()
   },
-  validator=lambda output: "Invalid time format: " + output if re.search(r"^[012]?\d:\d\d\b", output) is None else None,
+  validator=lambda output: "Invalid time format" if re.search(r"^[012]?\d:\d\d\b", output) is None else None,
   extractor=lambda output: re.search(r"^[012]?\d:\d\d\b", output).group(0),
   fallback=lambda persona: "08:00"
 )
@@ -141,14 +64,15 @@ OUTPUT:
   a list of daily actions in broad strokes.
 """
 run_gpt_prompt_daily_plan = create_prompt_runner(
-  skill, "daily_planning_v6",
+  skill["daily_planning_v6"],
   context_prep=lambda persona, wake_up_hour: {
     "commonset": persona.scratch.get_str_iss(),
     "date": persona.scratch.get_str_curr_date_str(),
     "firstname": persona.scratch.get_str_firstname(),
     "wake_up_hour": f"{str(wake_up_hour)}:00 am"
   },
-  extractor=lambda output: [line for line in output.split('\n')[1:] if line.strip()] if len(output.split('\n')) > 1 else [output],
+  validator=lambda output: None if len([line for line in output.split('\n') if line.strip() and line[0].isdigit()]) > 1 else "Expected 2+ lines starting with a digit",
+  extractor=lambda output: [line for line in output.split('\n') if line.strip() and line[0].isdigit()],
   fallback=lambda persona, wake_up_hour: [
     'wake up and complete the morning routine at 6:00 am', 
     'eat breakfast at 7:00 am', 
