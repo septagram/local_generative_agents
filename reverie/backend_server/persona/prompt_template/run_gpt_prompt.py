@@ -10,6 +10,7 @@ import datetime
 import sys
 import ast
 import pprint
+from asyncio import get_event_loop
 from termcolor import colored
 
 sys.path.append('../../')
@@ -65,11 +66,18 @@ def create_prompt_runner(
     try:
       # Step 3: Invoke the semantic function
       llm_output = str(skill[semantic_func_name](context=context))
+      # print(f"LLM output type: {type(llm_output).__name__}")
+      # print("LLM output properties:")
+      # pprint.pprint(vars(llm_output))
+
+      print(get_event_loop().reverie_server.curr_time)
+      curr_time = re.search(r'\b(\d\d:\d\d):\d\d$', str(get_event_loop().reverie_server.curr_time)).group(1)
       print(
-        ''.join([
-          "Semantic function: ",
+        ' '.join([
+          f"[{colored(curr_time, 'dark_grey')}]",
+          "Semantic function:",
           colored(semantic_func_name, 'yellow'),
-          " LLM output: ",
+          "LLM output:",
           colored(llm_output, 'light_blue'),
         ])
       )

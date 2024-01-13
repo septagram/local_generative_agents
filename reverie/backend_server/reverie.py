@@ -606,6 +606,12 @@ class ReverieServer:
         print ("Error.")
         pass
 
+  def open_server_in_event_loop(self):
+    # Create a new event loop and set it for the current context
+    self.loop = asyncio.new_event_loop()
+    self.loop.reverie_server = self
+    asyncio.set_event_loop(self.loop)
+    self.loop.run_until_complete(self.open_server())
 
 if __name__ == '__main__':
   # rs = ReverieServer("base_the_ville_isabella_maria_klaus", 
@@ -625,7 +631,4 @@ if __name__ == '__main__':
       target = input("Enter the name of the new simulation: ").strip()
 
   rs = ReverieServer(origin, target)
-  # Create a new event loop and set it for the current context
-  loop = asyncio.new_event_loop()
-  asyncio.set_event_loop(loop)
-  loop.run_until_complete(rs.open_server())
+  rs.open_server_in_event_loop()
