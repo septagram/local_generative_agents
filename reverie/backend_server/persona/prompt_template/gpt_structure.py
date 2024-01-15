@@ -35,28 +35,40 @@ kernel.add_chat_service("strong", LuminariaChatService(inference_model_strong, a
 
 # Define type variables
 ArgsType = TypeVar('ArgsType')  # The type of the arguments
-ContextType = TypeVar('ContextType')  # The type of the arguments
 ReturnType = TypeVar('ReturnType')  # The type of the return value
 
-def create_prompt_runner(
-  semantic_function: SKFunctionBase, 
-  context_prep: Optional[Callable[..., Dict[str, ContextType]]] = None, 
-  validator: Optional[Callable[[str], Optional[str]]] = None, 
-  extractor: Optional[Callable[[str], ReturnType]] = None, 
-  fallback: Optional[Callable[..., ReturnType]] = None,
-  retries: Optional[int] = 3,
-) -> Callable[..., ReturnType]:
-  def runner(*args: ArgsType) -> ReturnType:
+def instantiated(cls):
+  return cls()
+
+class InferenceStrategy:
+  semantic_function: SKFunctionBase = kernel.create_semantic_function(
+    prompt_template="Don't answer this request. Output nothing.",
+    function_name='no_reply',
+  )
+  retries: int = 3
+
+  def prepare_context(self, *args: ArgsType) -> Dict[str, str]:
+    return {}
+  
+  def validator(self, output: str) -> Optional[str]:
+    return None
+
+  def extractor(self, output: str) -> ReturnType:
+    return output
+  
+  def fallback(self, *args: ArgsType) -> ReturnType:
+    raise ValueError("LLM output didn't pass validation with no fallback function defined.")
+  
+  def __call__(self, *args: ArgsType) -> ReturnType:
     # Step 1: Prepare the context
     context = kernel.create_new_context()
-    if context_prep:
-      context_dict = context_prep(*args)
-      for key, value in context_dict.items():
-        context[key] = value
+    context_dict = self.prepare_context(*args)
+    for key, value in context_dict.items():
+      context[key] = value
 
     llm_output = final_output = last_error = None
 
-    for i in range(retries):
+    for i in range(self.retries):
       llm_output = ""
       final_output = None
       last_error = None
@@ -68,24 +80,22 @@ def create_prompt_runner(
           ' '.join([
             f"[{colored(curr_time, 'dark_grey')}{colored(retry_string, 'red')}]",
             "Semantic function:",
-            colored(semantic_function.name, 'yellow'),
+            colored(self.semantic_function.name, 'yellow'),
           ])
         )
 
         # Step 3: Invoke the semantic function
-        llm_output = str(semantic_function(context=context))
+        llm_output = str(self.semantic_function(context=context))
 
         # Step 4: Validate the output
-        if validator:
-          validation_error = validator(llm_output)
-          if validation_error is not None:
-            raise ValueError(validation_error)
+        validation_error = self.validator(llm_output)
+        if validation_error is not None:
+          raise ValueError(validation_error)
 
         # Step 5: Extract the data from the output
-        if extractor:
-          final_output = extractor(llm_output)
-        else:
-          final_output = llm_output
+        final_output = self.extractor(llm_output)
+
+        # Successful, so break the loop
         break
 
       except Exception as e:
@@ -97,15 +107,11 @@ def create_prompt_runner(
         print(colored(f"Final output: {final_output}", 'light_green'))
       return final_output
     else:
-      print(colored(f"Error in interaction with {semantic_function.name}: {str(last_error)}", 'red'))
+      print(colored(f"Error in interaction with {self.semantic_function.name}: {str(last_error)}", 'red'))
       if strict_errors:
         raise last_error
-      if fallback:
-        return fallback(*args)
       else:
-        return None
-
-  return runner
+        return self.fallback(*args)
 
 def temp_sleep(seconds=0.1):
   time.sleep(seconds)

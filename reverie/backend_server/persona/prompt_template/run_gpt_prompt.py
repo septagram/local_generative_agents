@@ -39,17 +39,25 @@ def get_random_alphanumeric(i=6, j=6):
 # CHAPTER 1: Run GPT Prompt
 ##############################################################################
 
-run_gpt_prompt_wake_up_hour = create_prompt_runner(
-  skill["wake_up_hour_v1"],
-  context_prep=lambda persona: {
-    "iss": persona.scratch.get_str_iss(),
-    "lifestyle": persona.scratch.get_str_lifestyle(),
-    "firstname": persona.scratch.get_str_firstname()
-  },
-  validator=lambda output: "Invalid time format" if re.search(r"^[012]?\d:\d\d\b", output) is None else None,
-  extractor=lambda output: re.search(r"^[012]?\d:\d\d\b", output).group(0),
-  fallback=lambda persona: "08:00"
-)
+@instantiated
+class run_gpt_prompt_wake_up_hour(InferenceStrategy):
+  semantic_function = skill["wake_up_hour_v1"]
+  
+  def prepare_context(self, persona):
+    return {
+      "iss": persona.scratch.get_str_iss(),
+      "lifestyle": persona.scratch.get_str_lifestyle(),
+      "firstname": persona.scratch.get_str_firstname()
+    }
+
+  def validator(self, output):
+    return "Invalid time format" if re.search(r"^[012]?\d:\d\d\b", output) is None else None
+
+  def extractor(self, output):
+    return re.search(r"^[012]?\d:\d\d\b", output).group(0)
+
+  def fallback(self, persona):
+    return "08:00"
 
 """
 Basically the long term planning that spans a day. Returns a list of actions
@@ -63,26 +71,35 @@ INPUT:
 OUTPUT: 
   a list of daily actions in broad strokes.
 """
-run_gpt_prompt_daily_plan = create_prompt_runner(
-  skill["daily_planning_v6"],
-  context_prep=lambda persona, wake_up_hour: {
-    "commonset": persona.scratch.get_str_iss(),
-    "date": persona.scratch.get_str_curr_date_str(),
-    "firstname": persona.scratch.get_str_firstname(),
-    "wake_up_hour": f"{str(wake_up_hour)}:00 am"
-  },
-  validator=lambda output: None if len([line for line in output.split('\n') if line.strip() and line[0].isdigit()]) > 1 else "Expected 2+ lines starting with a digit",
-  extractor=lambda output: [line for line in output.split('\n') if line.strip() and line[0].isdigit()],
-  fallback=lambda persona, wake_up_hour: [
-    'wake up and complete the morning routine at 6:00 am', 
-    'eat breakfast at 7:00 am', 
-    'read a book from 8:00 am to 12:00 pm', 
-    'have lunch at 12:00 pm', 
-    'take a nap from 1:00 pm to 4:00 pm', 
-    'relax and watch TV from 7:00 pm to 8:00 pm', 
-    'go to bed at 11:00 pm',
-  ]
-)
+@instantiated
+class run_gpt_prompt_daily_plan(InferenceStrategy):
+  semantic_function = skill["daily_planning_v6"]
+
+  def prepare_context(self, persona, wake_up_hour):
+    return {
+      "commonset": persona.scratch.get_str_iss(),
+      "date": persona.scratch.get_str_curr_date_str(),
+      "firstname": persona.scratch.get_str_firstname(),
+      "wake_up_hour": f"{str(wake_up_hour)}:00 am"
+    }
+
+  def validator(self, output):
+    if len([line for line in output.split('\n') if line.strip() and line[0].isdigit()]) <= 1:
+      return "Daily plan too short or in invalid format (expected 2+ lines starting with a digit)"
+
+  def extractor(self, output):
+    return [line for line in output.split('\n') if line.strip() and line[0].isdigit()]
+
+  def fallback(self, persona, wake_up_hour):
+    return [
+      'wake up and complete the morning routine at 6:00 am', 
+      'eat breakfast at 7:00 am', 
+      'read a book from 8:00 am to 12:00 pm', 
+      'have lunch at 12:00 pm', 
+      'take a nap from 1:00 pm to 4:00 pm', 
+      'relax and watch TV from 7:00 pm to 8:00 pm', 
+      'go to bed at 11:00 pm',
+    ]
 
 def surrounding_schedule(persona, task, duration): 
   hourly_schedule = persona.scratch.f_daily_schedule_hourly_org
