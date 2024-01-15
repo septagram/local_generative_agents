@@ -526,7 +526,32 @@ def _long_term_planning(persona, new_day):
   # time.sleep(10)
   # print("Done sleeping!")
 
+def is_sleeping(action: HourlyScheduleItem) -> bool: 
+  """
+  Given an action from the hourly schedule, this function determines whether
+  the action is a sleeping action. If the action is about the agent sleeping, we 
+  generally do not want to decompose it, so that's what we catch here. 
 
+  INPUT: 
+    action: an instance of HourlyScheduleItem which includes the task and its duration
+  OUTPUT: 
+    a boolean. True if the action is not a sleeping action and needs to be decomposed, False otherwise. 
+  """
+  task = action.task
+  # If the task doesn't mention "sleep" or "bed" at all, 
+  # then we assume it's not a sleeping action and should be decomposed.
+  if "sleep" not in task and "bed" not in task: 
+    return True
+  # If the task is explicit about the NPC sleeping (e.g., "sleeping", "asleep", "in bed"),
+  # then we don't decompose it as it's a single, continuous action.
+  elif "sleeping" in task or "asleep" in task or "in bed" in task:
+    return False
+  # If "sleep" or "bed" is mentioned, but it's not explicit that the NPC is sleeping,
+  # we use the duration to determine if it's a sleep or sleep-related action.
+  # If the duration is more than 60 minutes, we assume it's a sleep action and don't decompose it.
+  elif action.duration > 60: 
+    return False
+  return True
 
 def _determine_action(persona, maze): 
   """
@@ -540,27 +565,7 @@ def _determine_action(persona, maze):
     persona: Current <Persona> instance whose action we are determining. 
     maze: Current <Maze> instance. 
   """
-  def determine_decomp(act_desp, act_dura):
-    """
-    Given an action description and its duration, we determine whether we need
-    to decompose it. If the action is about the agent sleeping, we generally
-    do not want to decompose it, so that's what we catch here. 
-
-    INPUT: 
-      act_desp: the description of the action (e.g., "sleeping")
-      act_dura: the duration of the action in minutes. 
-    OUTPUT: 
-      a boolean. True if we need to decompose, False otherwise. 
-    """
-    if "sleep" not in act_desp and "bed" not in act_desp: 
-      return True
-    elif "sleeping" in act_desp or "asleep" in act_desp or "in bed" in act_desp:
-      return False
-    elif "sleep" in act_desp or "bed" in act_desp: 
-      if act_dura > 60: 
-        return False
-    return True
-
+ 
   # The goal of this function is to get us the action associated with 
   # <curr_index>. As a part of this, we may need to decompose some large 
   # chunk actions. 
@@ -578,13 +583,13 @@ def _determine_action(persona, maze):
     if item.duration >= 60: 
       # We decompose if the next action is longer than an hour, and fits the
       # criteria described in determine_decomp.
-      if determine_decomp(item.task, item.duration): 
+      if not is_sleeping(item): 
         persona.scratch.f_daily_schedule[curr_index:curr_index+1] = (
                             generate_task_decomp(persona, item.task, item.duration))
     if curr_index_60 + 1 < len(persona.scratch.f_daily_schedule):
       item = persona.scratch.f_daily_schedule[curr_index_60+1]
       if item.duration >= 60: 
-        if determine_decomp(item.task, item.duration): 
+        if not is_sleeping(item): 
           persona.scratch.f_daily_schedule[curr_index_60+1:curr_index_60+2] = (
                             generate_task_decomp(persona, item.task, item.duration))
 
@@ -597,7 +602,7 @@ def _determine_action(persona, maze):
       # And we don't want to decompose after 11 pm. 
       item = persona.scratch.f_daily_schedule[curr_index_60]
       if item.duration >= 60: 
-        if determine_decomp(item.task, item.duration): 
+        if not is_sleeping(item.task, item.duration): 
           persona.scratch.f_daily_schedule[curr_index_60:curr_index_60+1] = (
                               generate_task_decomp(persona, item.task, item.duration))
   # * End of Decompose * 

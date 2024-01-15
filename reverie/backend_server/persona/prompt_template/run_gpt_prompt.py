@@ -407,13 +407,13 @@ def run_gpt_prompt_action_sector(action_description,
   gpt_param = {"engine": "text-davinci-002", "max_tokens": 15, 
                "temperature": 0, "top_p": 1, "stream": False,
                "frequency_penalty": 0, "presence_penalty": 0, "stop": None}
-  prompt_template = "persona/prompt_template/v1/action_location_sector_v1.txt"
+  prompt_template = "persona/prompt_template/v4_sk/action_location_sector_v2/skprompt.txt"
   prompt_input = create_prompt_input(action_description, persona, maze)
   prompt = generate_prompt(prompt_input, prompt_template)
 
   fail_safe = get_fail_safe()
   output = safe_generate_response(prompt, gpt_param, 5, fail_safe,
-                                   __func_validate, __func_clean_up)
+                                   __func_validate, __func_clean_up, override_deprecated=True)
   y = f"{maze.access_tile(persona.scratch.curr_tile)['world']}"
   x = [i.strip() for i in persona.s_mem.get_str_accessible_sectors(y).split(",")]
   if output not in x: 
@@ -485,7 +485,7 @@ def run_gpt_prompt_action_arena(action_description,
     return prompt_input
 
   def __func_clean_up(gpt_response, prompt=""):
-    cleaned_response = gpt_response.split("}")[0]
+    cleaned_response = re.search('{(.+?)}', gpt_response).group(1)
     return cleaned_response
 
   def __func_validate(gpt_response, prompt=""): 
@@ -504,13 +504,13 @@ def run_gpt_prompt_action_arena(action_description,
   gpt_param = {"engine": "text-davinci-003", "max_tokens": 15, 
                "temperature": 0, "top_p": 1, "stream": False,
                "frequency_penalty": 0, "presence_penalty": 0, "stop": None}
-  prompt_template = "persona/prompt_template/v1/action_location_object_vMar11.txt"
+  prompt_template = "persona/prompt_template/v4_sk/action_location_object_v1/skprompt.txt"
   prompt_input = create_prompt_input(action_description, persona, maze, act_world, act_sector)
   prompt = generate_prompt(prompt_input, prompt_template)
 
   fail_safe = get_fail_safe()
   output = safe_generate_response(prompt, gpt_param, 5, fail_safe,
-                                   __func_validate, __func_clean_up)
+                                   __func_validate, __func_clean_up, override_deprecated=True)
   print (output)
   # y = f"{act_world}:{act_sector}"
   # x = [i.strip() for i in persona.s_mem.get_str_accessible_sector_arenas(y).split(",")]
