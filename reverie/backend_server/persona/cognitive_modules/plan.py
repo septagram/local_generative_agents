@@ -8,7 +8,9 @@ import datetime
 import math
 import random 
 import sys
+import re
 import time
+from collections import namedtuple
 sys.path.append('../../')
 
 from global_methods import *
@@ -16,6 +18,15 @@ from persona.prompt_template.run_gpt_prompt import *
 from persona.cognitive_modules.retrieve import *
 from persona.cognitive_modules.converse import *
 from persona.prompt_template.embedding import get_embedding
+
+class HourlyScheduleItem:
+  def __init__(self, task: str, start_time: int, duration: int = None):
+    self.task = task
+    self.start_time = start_time
+    self.duration = duration
+
+  def __repr__(self):
+    return f"HourlyScheduleItem(task={self.task}, start_time={self.start_time}, duration={self.duration})"
 
 ##############################################################################
 # CHAPTER 2: Generate
@@ -90,64 +101,52 @@ def generate_hourly_schedule(persona, wake_up_hour):
   """
   if debug: print ("GNS FUNCTION: <generate_hourly_schedule>")
 
-  hour_str = ["00:00 AM", "01:00 AM", "02:00 AM", "03:00 AM", "04:00 AM", 
-              "05:00 AM", "06:00 AM", "07:00 AM", "08:00 AM", "09:00 AM", 
-              "10:00 AM", "11:00 AM", "12:00 PM", "01:00 PM", "02:00 PM", 
-              "03:00 PM", "04:00 PM", "05:00 PM", "06:00 PM", "07:00 PM",
-              "08:00 PM", "09:00 PM", "10:00 PM", "11:00 PM"]
-  # Discarded original implementation: we don't have the luxury for multiple passes.
-  #
-  # n_m1_activity = []
-  # diversity_repeat_count = 3
-  # for i in range(diversity_repeat_count): 
-  #   n_m1_activity_set = set(n_m1_activity)
-  #   if len(n_m1_activity_set) < 5: 
-  #     n_m1_activity = []
-  #     for count, curr_hour_str in enumerate(hour_str): 
-  #       if wake_up_hour > 0: 
-  #         n_m1_activity += ["sleeping"]
-  #         wake_up_hour -= 1
-  #       else: 
-  #         n_m1_activity += [run_gpt_prompt_generate_hourly_schedule(
-  #                         persona, curr_hour_str, n_m1_activity, hour_str)[0]]
-  n_m1_activity = []
-  for count, curr_hour_str in enumerate(hour_str): 
-    if wake_up_hour > 0: 
-      n_m1_activity += ["sleeping"]
-      wake_up_hour -= 1
-    else: 
-      n_m1_activity += [run_gpt_prompt_generate_hourly_schedule(
-                      persona, curr_hour_str, n_m1_activity, hour_str)[0]]
+  # It appears that our daily plan is good enough, so how about we just use it instead?
+  # For compatibility reasons, let's recreate the hourly schedule structrue, as it was implemented previously
+  # Initialize an empty list to store the mapped daily requirements
+  daily_req_mapped = []
   
-  # Step 1. Compressing the hourly schedule to the following format: 
-  # The integer indicates the number of hours. They should add up to 24. 
-  # [['sleeping', 6], ['waking up and starting her morning routine', 1], 
-  # ['eating breakfast', 1], ['getting ready for the day', 1], 
-  # ['working on her painting', 2], ['taking a break', 1], 
-  # ['having lunch', 1], ['working on her painting', 3], 
-  # ['taking a break', 2], ['working on her painting', 2], 
-  # ['relaxing and watching TV', 1], ['going to bed', 1], ['sleeping', 2]]
-  _n_m1_hourly_compressed = []
-  prev = None 
-  prev_count = 0
-  for i in n_m1_activity: 
-    if i != prev:
-      prev_count = 1 
-      _n_m1_hourly_compressed += [[i, prev_count]]
-      prev = i
-    else: 
-      if _n_m1_hourly_compressed: 
-        _n_m1_hourly_compressed[-1][1] += 1
+  # Loop through each requirement in the daily requirements of the persona
+  for req in persona.scratch.daily_req:
+    # Extract the time and task from the requirement using regex
+    groups = re.search(r'[^\w\d]*(\d?\d(?::\d\d){1,2}(?:\s*(?:am|pm))?)[^\w\d]+(.*)', req, re.IGNORECASE).groups()
+    time_str = groups[0]
+    task = groups[1]
+    
+    # Convert the time string to a datetime object
+    dt = datetime.datetime.strptime(time_str, "%I:%M %p")
+    
+    # Calculate the minutes since midnight
+    minutes_since_midnight = dt.hour * 60 + dt.minute
+    
+    # If the daily_req_mapped list is empty and minutes_since_midnight is 0, append a sleeping schedule item
+    if not daily_req_mapped and minutes_since_midnight:
+      daily_req_mapped.append(HourlyScheduleItem('sleeping', 0, None))
+    
+    # Create a new schedule item for the current task
+    schedule_item = HourlyScheduleItem(task, minutes_since_midnight, None)
+    
+    # Get the previous schedule item and update its duration
+    if daily_req_mapped:
+      prev_schedule_item = daily_req_mapped[-1]
+      prev_schedule_item.duration = schedule_item.start_time - prev_schedule_item.start_time
+    
+    # Append the current schedule item to the list
+    daily_req_mapped.append(schedule_item)
+  
+  # Update the duration of the last schedule item
+  last_item = daily_req_mapped[-1]
+  last_item.duration = 24*60 - last_item.start_time
 
-  # Step 2. Expand to min scale (from hour scale)
-  # [['sleeping', 360], ['waking up and starting her morning routine', 60], 
-  # ['eating breakfast', 60],..
-  n_m1_hourly_compressed = []
-  for task, duration in _n_m1_hourly_compressed: 
-    n_m1_hourly_compressed += [[task, duration*60]]
+  # If the duration of the last item is 0 or less, remove it from the list
+  if last_item.duration <= 0:
+    daily_req_mapped.pop()
 
-  return n_m1_hourly_compressed
-
+  # Print the mapped daily requirements for debugging purposes
+  print(colored(daily_req_mapped, "light_magenta"))
+  
+  # Return the mapped daily requirements
+  return daily_req_mapped
 
 def generate_task_decomp(persona, task, duration): 
   """
@@ -575,19 +574,19 @@ def _determine_action(persona, maze):
   # sequence. We do that here. 
   if curr_index == 0:
     # This portion is invoked if it is the first hour of the day. 
-    act_desp, act_dura = persona.scratch.f_daily_schedule[curr_index]
-    if act_dura >= 60: 
+    item = persona.scratch.f_daily_schedule[curr_index]
+    if item.duration >= 60: 
       # We decompose if the next action is longer than an hour, and fits the
       # criteria described in determine_decomp.
-      if determine_decomp(act_desp, act_dura): 
+      if determine_decomp(item.task, item.duration): 
         persona.scratch.f_daily_schedule[curr_index:curr_index+1] = (
-                            generate_task_decomp(persona, act_desp, act_dura))
+                            generate_task_decomp(persona, item.task, item.duration))
     if curr_index_60 + 1 < len(persona.scratch.f_daily_schedule):
-      act_desp, act_dura = persona.scratch.f_daily_schedule[curr_index_60+1]
-      if act_dura >= 60: 
-        if determine_decomp(act_desp, act_dura): 
+      item = persona.scratch.f_daily_schedule[curr_index_60+1]
+      if item.duration >= 60: 
+        if determine_decomp(item.task, item.duration): 
           persona.scratch.f_daily_schedule[curr_index_60+1:curr_index_60+2] = (
-                            generate_task_decomp(persona, act_desp, act_dura))
+                            generate_task_decomp(persona, item.task, item.duration))
 
   if curr_index_60 < len(persona.scratch.f_daily_schedule):
     # If it is not the first hour of the day, this is always invoked (it is
@@ -596,11 +595,11 @@ def _determine_action(persona, maze):
     # decompose as well, so we check for that too. 
     if persona.scratch.curr_time.hour < 23:
       # And we don't want to decompose after 11 pm. 
-      act_desp, act_dura = persona.scratch.f_daily_schedule[curr_index_60]
-      if act_dura >= 60: 
-        if determine_decomp(act_desp, act_dura): 
+      item = persona.scratch.f_daily_schedule[curr_index_60]
+      if item.duration >= 60: 
+        if determine_decomp(item.task, item.duration): 
           persona.scratch.f_daily_schedule[curr_index_60:curr_index_60+1] = (
-                              generate_task_decomp(persona, act_desp, act_dura))
+                              generate_task_decomp(persona, item.task, item.duration))
   # * End of Decompose * 
 
   # Generate an <Action> instance from the action description and duration. By
@@ -616,7 +615,7 @@ def _determine_action(persona, maze):
   # 1440
   x_emergency = 0
   for i in persona.scratch.f_daily_schedule: 
-    x_emergency += i[1]
+    x_emergency += i.duration
   # print ("x_emergency", x_emergency)
 
   if 1440 - x_emergency > 0: 
@@ -626,7 +625,7 @@ def _determine_action(persona, maze):
 
 
 
-  act_desp, act_dura = persona.scratch.f_daily_schedule[curr_index] 
+  cur_item = persona.scratch.f_daily_schedule[curr_index] 
 
 
 
@@ -634,24 +633,24 @@ def _determine_action(persona, maze):
   # variables.
   act_world = maze.access_tile(persona.scratch.curr_tile)["world"]
   # act_sector = maze.access_tile(persona.scratch.curr_tile)["sector"]
-  act_sector = generate_action_sector(act_desp, persona, maze)
-  act_arena = generate_action_arena(act_desp, persona, maze, act_world, act_sector)
+  act_sector = generate_action_sector(cur_item.task, persona, maze)
+  act_arena = generate_action_arena(cur_item.task, persona, maze, act_world, act_sector)
   act_address = f"{act_world}:{act_sector}:{act_arena}"
-  act_game_object = generate_action_game_object(act_desp, act_address,
+  act_game_object = generate_action_game_object(cur_item.task, act_address,
                                                 persona, maze)
   new_address = f"{act_world}:{act_sector}:{act_arena}:{act_game_object}"
-  act_pron = generate_action_pronunciatio(act_desp, persona)
-  act_event = generate_action_event_triple(act_desp, persona)
+  act_pron = generate_action_pronunciatio(cur_item.task, persona)
+  act_event = generate_action_event_triple(cur_item.task, persona)
   # Persona's actions also influence the object states. We set those up here. 
-  act_obj_desp = generate_act_obj_desc(act_game_object, act_desp, persona)
+  act_obj_desp = generate_act_obj_desc(act_game_object, cur_item.task, persona)
   act_obj_pron = generate_action_pronunciatio(act_obj_desp, persona)
   act_obj_event = generate_act_obj_event_triple(act_game_object, 
                                                 act_obj_desp, persona)
 
   # Adding the action to persona's queue. 
   persona.scratch.add_new_action(new_address, 
-                                 int(act_dura), 
-                                 act_desp, 
+                                 cur_item.duration,
+                                 cur_item.task, 
                                  act_pron, 
                                  act_event,
                                  None,
