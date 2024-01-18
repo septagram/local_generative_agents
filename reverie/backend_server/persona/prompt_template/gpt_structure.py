@@ -16,7 +16,7 @@ from typing import Callable, Dict, Optional, TypeVar
 from openai import AsyncOpenAI
 from asyncio import get_event_loop
 from termcolor import colored
-from semantic_kernel import SKFunctionBase
+from semantic_kernel.orchestration.sk_function import SKFunction
 
 from semantic_kernel.connectors.ai.open_ai import OpenAIChatCompletion
 from persona.prompt_template.LuminariaChatService import LuminariaChatService
@@ -37,11 +37,13 @@ kernel.add_chat_service("strong", LuminariaChatService(inference_model_strong, a
 ArgsType = TypeVar('ArgsType')  # The type of the arguments
 ReturnType = TypeVar('ReturnType')  # The type of the return value
 
-def instantiated(cls):
-  return cls()
+def functor(cls):
+  def infer(*args: ArgsType) -> ReturnType:
+    return cls()(*args)
+  return infer
 
 class InferenceStrategy:
-  semantic_function: SKFunctionBase = kernel.create_semantic_function(
+  semantic_function: SKFunction = kernel.create_semantic_function(
     prompt_template="Don't answer this request. Output nothing.",
     function_name='no_reply',
   )
@@ -64,7 +66,7 @@ class InferenceStrategy:
     context = kernel.create_new_context()
     context_dict = self.prepare_context(*args)
     for key, value in context_dict.items():
-      context[key] = value
+      context[key] = str(value)
 
     llm_output = final_output = last_error = None
 
@@ -83,9 +85,16 @@ class InferenceStrategy:
             colored(self.semantic_function.name, 'yellow'),
           ])
         )
+        # if i == 0:
+        #   # Output the full prompt. (How do we do that in SK?)
+        #   prompt = self.semantic_function._chat_prompt_template
+        #   for key, value in context_dict.items():
+        #     prompt = prompt.replace("{{$" + key + "}}", str(value))
+        #   print(colored(prompt, 'blue'))
 
         # Step 3: Invoke the semantic function
         llm_output = str(self.semantic_function(context=context))
+        print(colored(llm_output, 'cyan'))
 
         # Step 4: Validate the output
         validation_error = self.validator(llm_output)
@@ -101,7 +110,6 @@ class InferenceStrategy:
       except Exception as e:
         last_error = e
 
-    print(colored(llm_output, 'light_blue'))
     if last_error is None:
       if final_output != llm_output:
         print(colored(f"Final output: {final_output}", 'light_green'))
