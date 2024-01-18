@@ -11,6 +11,7 @@ import time
 import os
 import re
 import semantic_kernel as sk
+import traceback
 
 from typing import Callable, Dict, Optional, TypeVar
 from openai import AsyncOpenAI
@@ -124,8 +125,45 @@ class InferenceStrategy:
 def temp_sleep(seconds=0.1):
   time.sleep(seconds)
 
-def ChatGPT_single_request(prompt): 
+def deprecated(prompt, gpt_parameter, override_deprecated=False):
+  full_prompt = f"Without any prelude, deliberation or reasoning, continue the following block of text:\n\n{prompt}"
+  
+  stack_trace = traceback.format_stack()
+  function_name = None
+  
+  for trace in stack_trace:
+    match = re.search(r'\brun_gpt_prompt_\w+', trace)
+    if match:
+      function_name = match.group()
+      break
+  
+  if function_name is None:
+    function_name = re.sub(r'[^\w\d]+', '_', '_'.join(stack_trace))
+
+
+  class LegacyPrompt(InferenceStrategy):
+    semantic_function = kernel.create_semantic_function(
+      prompt_template=full_prompt,
+      function_name=function_name,
+      temperature=gpt_parameter.get("temperature", 0),
+      max_tokens=gpt_parameter.get("max_tokens", 500),
+      top_p=gpt_parameter.get("top_p", 1),
+      frequency_penalty=gpt_parameter.get("frequency_penalty", 0),
+      presence_penalty=gpt_parameter.get("presence_penalty", 0),
+      stop_sequences=gpt_parameter.get("stop", None),
+    )
+    retries = 1
+
+  output = str(LegacyPrompt()())
+  if not override_deprecated:
+    traceback.print_stack()
+    print(colored(f"The function {function_name} is deprecated and will be removed.", 'red'))
+    exit()
+  return output
+
+def ChatGPT_single_request(prompt, override_deprecated=False): 
   temp_sleep()
+  return deprecated(prompt, {}, override_deprecated)
 
   completion = openai.ChatCompletion.create(
     model="gpt-3.5-turbo", 
@@ -138,7 +176,7 @@ def ChatGPT_single_request(prompt):
 # #####################[SECTION 1: CHATGPT-3 STRUCTURE] ######################
 # ============================================================================
 
-def GPT4_request(prompt): 
+def GPT4_request(prompt, override_deprecated=False): 
   """
   Given a prompt and a dictionary of GPT parameters, make a request to OpenAI
   server and returns the response. 
@@ -151,6 +189,7 @@ def GPT4_request(prompt):
     a str of GPT-3's response. 
   """
   temp_sleep()
+  return deprecated(prompt, {}, override_deprecated)
 
   try: 
     completion = openai.ChatCompletion.create(
@@ -164,7 +203,7 @@ def GPT4_request(prompt):
     return "ChatGPT ERROR"
 
 
-def ChatGPT_request(prompt): 
+def ChatGPT_request(prompt, override_deprecated=False): 
   """
   Given a prompt and a dictionary of GPT parameters, make a request to OpenAI
   server and returns the response. 
@@ -177,6 +216,7 @@ def ChatGPT_request(prompt):
     a str of GPT-3's response. 
   """
   # temp_sleep()
+  return deprecated(prompt, {}, override_deprecated)
   try: 
     completion = openai.ChatCompletion.create(
     model="gpt-3.5-turbo", 
@@ -196,7 +236,8 @@ def GPT4_safe_generate_response(prompt,
                                    fail_safe_response="error",
                                    func_validate=None,
                                    func_clean_up=None,
-                                   verbose=False): 
+                                   verbose=False,
+                                   override_deprecated=False): 
   prompt = 'GPT-3 Prompt:\n"""\n' + prompt + '\n"""\n'
   prompt += f"Output the response to the prompt above in json. {special_instruction}\n"
   prompt += "Example output json:\n"
@@ -209,7 +250,7 @@ def GPT4_safe_generate_response(prompt,
   for i in range(repeat): 
 
     try: 
-      curr_gpt_response = GPT4_request(prompt).strip()
+      curr_gpt_response = GPT4_request(prompt, override_deprecated).strip()
       end_index = curr_gpt_response.rfind('}') + 1
       curr_gpt_response = curr_gpt_response[:end_index]
       curr_gpt_response = json.loads(curr_gpt_response)["output"]
@@ -235,7 +276,8 @@ def ChatGPT_safe_generate_response(prompt,
                                    fail_safe_response="error",
                                    func_validate=None,
                                    func_clean_up=None,
-                                   verbose=False): 
+                                   verbose=False,
+                                   override_deprecated=False): 
   # prompt = 'GPT-3 Prompt:\n"""\n' + prompt + '\n"""\n'
   prompt = '"""\n' + prompt + '\n"""\n'
   prompt += f"Output the response to the prompt above in json. {special_instruction}\n"
@@ -249,7 +291,7 @@ def ChatGPT_safe_generate_response(prompt,
   for i in range(repeat): 
 
     try: 
-      curr_gpt_response = ChatGPT_request(prompt).strip()
+      curr_gpt_response = ChatGPT_request(prompt, override_deprecated).strip()
       end_index = curr_gpt_response.rfind('}') + 1
       curr_gpt_response = curr_gpt_response[:end_index]
       curr_gpt_response = json.loads(curr_gpt_response)["output"]
@@ -277,14 +319,15 @@ def ChatGPT_safe_generate_response_OLD(prompt,
                                    fail_safe_response="error",
                                    func_validate=None,
                                    func_clean_up=None,
-                                   verbose=False): 
+                                   verbose=False,
+                                   override_deprecated=False): 
   if verbose: 
     print ("CHAT GPT PROMPT")
     print (prompt)
 
   for i in range(repeat): 
     try: 
-      curr_gpt_response = ChatGPT_request(prompt).strip()
+      curr_gpt_response = ChatGPT_request(prompt, override_deprecated).strip()
       if func_validate(curr_gpt_response, prompt=prompt): 
         return func_clean_up(curr_gpt_response, prompt=prompt)
       if verbose: 
@@ -302,7 +345,7 @@ def ChatGPT_safe_generate_response_OLD(prompt,
 # ###################[SECTION 2: ORIGINAL GPT-3 STRUCTURE] ###################
 # ============================================================================
 
-def GPT_request(prompt, gpt_parameter): 
+def GPT_request(prompt, gpt_parameter, override_deprecated=False): 
   """
   Given a prompt and a dictionary of GPT parameters, make a request to OpenAI
   server and returns the response. 
@@ -315,6 +358,7 @@ def GPT_request(prompt, gpt_parameter):
     a str of GPT-3's response. 
   """
   temp_sleep()
+  return deprecated(prompt, gpt_parameter, override_deprecated)
   try: 
     response = openai.Completion.create(
                 model=gpt_parameter["engine"],
@@ -366,12 +410,13 @@ def safe_generate_response(prompt,
                            fail_safe_response="error",
                            func_validate=None,
                            func_clean_up=None,
-                           verbose=False): 
+                           verbose=False,
+                           override_deprecated=False): 
   if verbose: 
     print (prompt)
 
   for i in range(repeat): 
-    curr_gpt_response = GPT_request(prompt, gpt_parameter)
+    curr_gpt_response = GPT_request(prompt, gpt_parameter, override_deprecated=override_deprecated)
     if func_validate(curr_gpt_response, prompt=prompt): 
       return func_clean_up(curr_gpt_response, prompt=prompt)
     if verbose: 
