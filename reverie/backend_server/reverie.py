@@ -611,7 +611,10 @@ class ReverieServer:
     self.loop = asyncio.new_event_loop()
     self.loop.reverie_server = self
     asyncio.set_event_loop(self.loop)
-    self.loop.run_until_complete(self.open_server())
+    try:
+      self.loop.run_until_complete(self.open_server())
+    finally:
+      self.loop.close()
 
 if __name__ == '__main__':
   # rs = ReverieServer("base_the_ville_isabella_maria_klaus", 

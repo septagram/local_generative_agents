@@ -16,6 +16,7 @@ sys.path.append('../../')
 from global_methods import *
 from persona.prompt_template.gpt_structure import *
 from persona.prompt_template.print_prompt import *
+from persona.common import HourlyScheduleItem
 
 kernel.set_default_chat_service("strong")
 skill = kernel.import_semantic_skill_from_directory("persona/prompt_template", "v4_sk")
@@ -39,7 +40,7 @@ def get_random_alphanumeric(i=6, j=6):
 # CHAPTER 1: Run GPT Prompt
 ##############################################################################
 
-@instantiated
+@functor
 class run_gpt_prompt_wake_up_hour(InferenceStrategy):
   semantic_function = skill["wake_up_hour_v1"]
   
@@ -71,7 +72,7 @@ INPUT:
 OUTPUT: 
   a list of daily actions in broad strokes.
 """
-@instantiated
+@functor
 class run_gpt_prompt_daily_plan(InferenceStrategy):
   semantic_function = skill["daily_planning_v6"]
 
@@ -101,87 +102,70 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
       'go to bed at 11:00 pm',
     ]
 
-def surrounding_schedule(persona, task, duration): 
-  hourly_schedule = persona.scratch.f_daily_schedule_hourly_org
+# A few shot decomposition of a task given the task description 
+#
+# Persona state: identity stable set, curr_date_str, first_name
+#
+# INPUT: 
+#   persona: The Persona class instance 
+#   task: the description of the task at hand in str form
+#         (e.g., "waking up and starting her morning routine")
+#   duration: an integer that indicates the number of minutes this task is 
+#             meant to last (e.g., 60)
+# OUTPUT: 
+#   a list of list where the inner list contains the decomposed task 
+#   description and the number of minutes the task is supposed to last. 
+# EXAMPLE OUTPUT: 
+#   [['going to the bathroom', 5], ['getting dressed', 5], 
+#     ['eating breakfast', 15], ['checking her email', 5], 
+#     ['getting her supplies ready for the day', 15], 
+#     ['starting to work on her painting', 15]] 
+@functor
+class run_gpt_prompt_task_decomp(InferenceStrategy):
+  semantic_function = skill["task_decomp_v3"]
 
-run_gpt_prompt_task_decomp = create_prompt_runner(
-  skill['task_decomp_v3'],
-  context_prep=lambda persona, task, duration: {
-    "commonset": persona.scratch.get_str_iss(),
-    "firstname": persona.scratch.get_str_firstname(),
-    "surrounding_schedule": persona.scratch.get_f_daily_schedule_hourly_org_index()
-  },
-)
+  def prepare_context(self, persona, schedule_item: HourlyScheduleItem):
+    # The complex part is producing the surrounding schedule.
+    # Here's an example:
+    #
+    # Today is Saturday June 25. From 00:00 ~ 06:00am, Maeve is 
+    # planning on sleeping, 06:00 ~ 07:00am, Maeve is 
+    # planning on waking up and doing her morning routine, 
+    # and from 07:00am ~08:00am, Maeve is planning on having 
+    # breakfast.  
 
-def run_gpt_prompt_task_decomp_old(persona, 
-                               task, 
-                               duration, 
-                               test_input=None, 
-                               verbose=False): 
-  def create_prompt_input(persona, task, duration, test_input=None):
+    self.schedule_item = schedule_item
+    firstname = persona.scratch.get_str_firstname()
+    schedule = persona.scratch.f_daily_schedule_hourly_org
+    schedule_item_index = schedule.index(schedule_item)
+    start_index = max(schedule_item_index - 1, 0)
+    end_index = min(schedule_item_index + 2, len(schedule) - 1)
+    surrounding_schedule_items = schedule[start_index:end_index]
 
-    """
-    Today is Saturday June 25. From 00:00 ~ 06:00am, Maeve is 
-    planning on sleeping, 06:00 ~ 07:00am, Maeve is 
-    planning on waking up and doing her morning routine, 
-    and from 07:00am ~08:00am, Maeve is planning on having breakfast.  
-    """
-      
-    curr_f_org_index = persona.scratch.get_f_daily_schedule_hourly_org_index()
-    all_indices = []
-    # if curr_f_org_index > 0: 
-    #   all_indices += [curr_f_org_index-1]
-    all_indices += [curr_f_org_index]
-    if curr_f_org_index+1 <= len(persona.scratch.f_daily_schedule_hourly_org): 
-      all_indices += [curr_f_org_index+1]
-    if curr_f_org_index+2 <= len(persona.scratch.f_daily_schedule_hourly_org): 
-      all_indices += [curr_f_org_index+2]
-
-    curr_time_range = ""
-
-    print ("DEBUG")
-    print (persona.scratch.f_daily_schedule_hourly_org)
-    print (all_indices)
-
+    primary_time_range = None
     summ_str = f'Today is {persona.scratch.curr_time.strftime("%B %d, %Y")}. '
     summ_str += f'From '
-    for index in all_indices: 
-      print ("index", index)
-      if index < len(persona.scratch.f_daily_schedule_hourly_org): 
-        start_min = 0
-        for i in range(index): 
-          start_min += persona.scratch.f_daily_schedule_hourly_org[i][1]
-        end_min = start_min + persona.scratch.f_daily_schedule_hourly_org[index][1]
-        start_time = (datetime.datetime.strptime("00:00:00", "%H:%M:%S") 
-                      + datetime.timedelta(minutes=start_min)) 
-        end_time = (datetime.datetime.strptime("00:00:00", "%H:%M:%S") 
-                      + datetime.timedelta(minutes=end_min)) 
-        start_time_str = start_time.strftime("%H:%M%p")
-        end_time_str = end_time.strftime("%H:%M%p")
-        summ_str += f"{start_time_str} ~ {end_time_str}, {persona.name} is planning on {persona.scratch.f_daily_schedule_hourly_org[index][0]}, "
-        if curr_f_org_index+1 == index:
-          curr_time_range = f'{start_time_str} ~ {end_time_str}'
+    for cur_item in surrounding_schedule_items: 
+      start_time_str = self.minutes_to_time_string(cur_item.start_time)
+      end_time_str = self.minutes_to_time_string(cur_item.start_time + cur_item.duration)
+      cur_time_range = f'{start_time_str} ~ {end_time_str}'
+      summ_str += f'{cur_time_range}, {firstname} is planning on "{cur_item.task}", '
+      if cur_item is schedule_item:
+        primary_time_range = f'{start_time_str} ~ {end_time_str}'
     summ_str = summ_str[:-2] + "."
 
-    prompt_input = []
-    prompt_input += [persona.scratch.get_str_iss()]
-    prompt_input += [summ_str]
-    # prompt_input += [persona.scratch.get_str_curr_date_str()]
-    prompt_input += [persona.scratch.get_str_firstname()]
-    prompt_input += [persona.scratch.get_str_firstname()]
-    prompt_input += [task]
-    prompt_input += [curr_time_range]
-    prompt_input += [duration]
-    prompt_input += [persona.scratch.get_str_firstname()]
-    return prompt_input
+    return {
+      "commonset": persona.scratch.get_str_iss(),
+      "surrounding_schedule": summ_str,
+      "firstname": firstname,
+      "task": schedule_item.task,
+      "time_range": primary_time_range,
+      "duration": schedule_item.duration
+    }
 
-  def __func_clean_up(gpt_response, prompt=""):
-    print ("TOODOOOOOO")
-    print (gpt_response)
-    print ("-==- -==- -==- ")
-
+  def extractor(self, output):
     # TODO SOMETHING HERE sometimes fails... See screenshot
-    temp = [i.strip() for i in gpt_response.split("\n")]
+    temp = [i.strip() for i in output.split("\n")]
     _cr = []
     cr = []
     for count, i in enumerate(temp): 
@@ -192,13 +176,11 @@ def run_gpt_prompt_task_decomp_old(persona,
     for count, i in enumerate(_cr): 
       k = [j.strip() for j in i.split("(duration in minutes:")]
       task = k[0]
-      if task[-1] == ".": 
-        task = task[:-1]
-      duration = int(k[1].split(",")[0].strip())
+      task = re.sub(r'[^\w\d]*$', '', task)
+      duration = int(re.findall(r'\d+', k[1])[0])
       cr += [[task, duration]]
 
-    total_expected_min = int(prompt.split("(total duration in minutes")[-1]
-                                   .split("):")[0].strip())
+    total_expected_min = self.schedule_item.duration
     
     # TODO -- now, you need to make sure that this is the same as the sum of 
     #         the current action sequence. 
@@ -232,82 +214,13 @@ def run_gpt_prompt_task_decomp_old(persona,
 
     return cr
 
-  def __func_validate(gpt_response, prompt=""): 
-    # TODO -- this sometimes generates error 
-    try: 
-      __func_clean_up(gpt_response)
-    except: 
-      pass
-      # return False
-    return gpt_response
+  def fallback(self, persona, schedule_item):
+    return [[schedule_item.task, schedule_item.duration]]
 
-  def get_fail_safe(): 
-    fs = ["asleep"]
-    return fs
-
-  gpt_param = {"engine": "text-davinci-003", "max_tokens": 1000, 
-             "temperature": 0, "top_p": 1, "stream": False,
-             "frequency_penalty": 0, "presence_penalty": 0, "stop": None}
-  prompt_template = "persona/prompt_template/v2/task_decomp_v3.txt"
-  prompt_input = create_prompt_input(persona, task, duration)
-  prompt = generate_prompt(prompt_input, prompt_template)
-  fail_safe = get_fail_safe()
-
-  print ("?????")
-  print (prompt)
-  output = safe_generate_response(prompt, gpt_param, 5, get_fail_safe(),
-                                   __func_validate, __func_clean_up, override_deprecated=True)
-
-  # TODO THERE WAS A BUG HERE... 
-  # This is for preventing overflows...
-  """
-  File "/Users/joonsungpark/Desktop/Stanford/Projects/
-  generative-personas/src_exploration/reverie_simulation/
-  brain/get_next_action_v3.py", line 364, in run_gpt_prompt_task_decomp
-  fin_output[-1][1] += (duration - ftime_sum)
-  IndexError: list index out of range
-  """
-
-  print ("IMPORTANT VVV DEBUG")
-
-  # print (prompt_input)
-  # print (prompt)
-  print (output)
-
-  fin_output = []
-  time_sum = 0
-  for i_task, i_duration in output: 
-    time_sum += i_duration
-    # HM?????????
-    # if time_sum < duration: 
-    if time_sum <= duration: 
-      fin_output += [[i_task, i_duration]]
-    else: 
-      break
-  ftime_sum = 0
-  for fi_task, fi_duration in fin_output: 
-    ftime_sum += fi_duration
-  
-  # print ("for debugging... line 365", fin_output)
-  fin_output[-1][1] += (duration - ftime_sum)
-  output = fin_output 
-
-
-
-  task_decomp = output
-  ret = []
-  for decomp_task, duration in task_decomp: 
-    ret += [[f"{task} ({decomp_task})", duration]]
-  output = ret
-
-
-  if debug or verbose: 
-    print_run_prompts(prompt_template, persona, gpt_param, 
-                      prompt_input, prompt, output)
-    
-  return output, [output, prompt, gpt_param, prompt_input, fail_safe]
-
-
+  def minutes_to_time_string(self, minutes):
+    time = (datetime.datetime.strptime("00:00:00", "%H:%M:%S") 
+            + datetime.timedelta(minutes=minutes)) 
+    return time.strftime("%H:%M %p").lower()
 
 def run_gpt_prompt_action_sector(action_description, 
                                 persona, 
@@ -586,8 +499,9 @@ def run_gpt_prompt_action_game_object(action_description,
 
   fail_safe = get_fail_safe()
   output = safe_generate_response(prompt, gpt_param, 5, fail_safe,
-                                   __func_validate, __func_clean_up)
+                                   __func_validate, __func_clean_up, override_deprecated=True)
 
+  output = re.search('^[^\n]*', output).group()
   x = [i.strip() for i in persona.s_mem.get_str_accessible_arena_game_objects(temp_address).split(",")]
   if output not in x: 
     output = random.choice(x)
@@ -608,19 +522,19 @@ def run_gpt_prompt_pronunciatio(action_description, persona, verbose=False):
     prompt_input = [action_description]
     return prompt_input
   
-  def __func_clean_up(gpt_response, prompt=""):
-    cr = gpt_response.strip()
-    if len(cr) > 3:
-      cr = cr[:3]
-    return cr
+  # def __func_clean_up(gpt_response, prompt=""):
+  #   cr = gpt_response.strip()
+  #   if len(cr) > 3:
+  #     cr = cr[:3]
+  #   return cr
 
-  def __func_validate(gpt_response, prompt=""): 
-    try: 
-      __func_clean_up(gpt_response, prompt="")
-      if len(gpt_response) == 0: 
-        return False
-    except: return False
-    return True 
+  # def __func_validate(gpt_response, prompt=""): 
+  #   try: 
+  #     __func_clean_up(gpt_response, prompt="")
+  #     if len(gpt_response) == 0: 
+  #       return False
+  #   except: return False
+  #   return True 
 
   def get_fail_safe(): 
     fs = "😋"
@@ -636,27 +550,31 @@ def run_gpt_prompt_pronunciatio(action_description, persona, verbose=False):
 
   def __chat_func_validate(gpt_response, prompt=""): ############
     try: 
-      __func_clean_up(gpt_response, prompt="")
+      __chat_func_clean_up(gpt_response, prompt="")
       if len(gpt_response) == 0: 
         return False
     except: return False
     return True 
-    return True
 
-  print ("asdhfapsh8p9hfaiafdsi;ldfj as DEBUG 4") ########
-  gpt_param = {"engine": "text-davinci-002", "max_tokens": 15, 
-               "temperature": 0, "top_p": 1, "stream": False,
-               "frequency_penalty": 0, "presence_penalty": 0, "stop": None}
-  prompt_template = "persona/prompt_template/v3_ChatGPT/generate_pronunciatio_v1.txt" ########
+  # print ("asdhfapsh8p9hfaiafdsi;ldfj as DEBUG 4") ########
+  # gpt_param = {"engine": "text-davinci-002", "max_tokens": 15, 
+  #              "temperature": 0, "top_p": 1, "stream": False,
+  #              "frequency_penalty": 0, "presence_penalty": 0, "stop": None}
+  # prompt_template = "persona/prompt_template/v3_ChatGPT/generate_pronunciatio_v1.txt" ########
   prompt_input = create_prompt_input(action_description)  ########
-  prompt = generate_prompt(prompt_input, prompt_template)
-  example_output = "🛁🧖‍♀️" ########
-  special_instruction = "The value for the output must ONLY contain the emojis." ########
-  fail_safe = get_fail_safe()
-  output = ChatGPT_safe_generate_response(prompt, example_output, special_instruction, 3, fail_safe,
-                                          __chat_func_validate, __chat_func_clean_up, True)
-  if output != False: 
-    return output, [output, prompt, gpt_param, prompt_input, fail_safe]
+  # prompt = generate_prompt(prompt_input, prompt_template)
+  # example_output = "🛁🧖‍♀️" ########
+  # special_instruction = "The value for the output must ONLY contain the emojis." ########
+  # fail_safe = get_fail_safe()
+  output = skill["generate_pronunciatio"](prompt_input)
+  if __chat_func_validate(output):
+    return output
+  else:
+    return get_fail_safe()
+  # output = ChatGPT_safe_generate_response(prompt, example_output, special_instruction, 3, fail_safe,
+  #                                         __chat_func_validate, __chat_func_clean_up, True)
+  # if output != False: 
+  #   return output, [output, prompt, gpt_param, prompt_input, fail_safe]
   # ChatGPT Plugin ===========================================================
 
 
@@ -760,7 +678,7 @@ def run_gpt_prompt_event_triple(action_description, persona, verbose=False):
   prompt = generate_prompt(prompt_input, prompt_template)
   fail_safe = get_fail_safe(persona) ########
   output = safe_generate_response(prompt, gpt_param, 5, fail_safe,
-                                   __func_validate, __func_clean_up)
+                                   __func_validate, __func_clean_up, override_deprecated=True)
   output = (persona.name, output[0], output[1])
 
   if debug or verbose: 
@@ -830,7 +748,7 @@ def run_gpt_prompt_act_obj_desc(act_game_object, act_desp, persona, verbose=Fals
   special_instruction = "The output should ONLY contain the phrase that should go in <fill in>." ########
   fail_safe = get_fail_safe(act_game_object) ########
   output = ChatGPT_safe_generate_response(prompt, example_output, special_instruction, 3, fail_safe,
-                                          __chat_func_validate, __chat_func_clean_up, True)
+                                          __chat_func_validate, __chat_func_clean_up, True, override_deprecated=True)
   if output != False: 
     return output, [output, prompt, gpt_param, prompt_input, fail_safe]
   # ChatGPT Plugin ===========================================================

@@ -20,3 +20,5 @@ Stay in the current area if the activity can be done there. Only go out if the a
 Area Options Available (Class label): {!<INPUT 7>!}
 
 Classification Task: !<INPUT 8>! is !<INPUT 10>! as a part of !<INPUT 9>!. Pick one of the choices given in the Area options that !<INPUT 11>! should go to. 
+
+Answer without any prelude, only include the area name in the curly brackets, e.g., {kitchen}, and end your answer immediately.

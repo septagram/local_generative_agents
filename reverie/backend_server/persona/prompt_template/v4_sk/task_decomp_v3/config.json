@@ -1,10 +1,10 @@
 {
   "schema": 1,
   "type": "completion",
-  "description": "Generate 1-2 emoji representing the given action",
+  "description": "Generates a detailed breakdown of subtasks for a given task, performed by a specific persona within a specified time range.",
   "completion": {
     "max_tokens": 1000,
-    "temperature": 0,
+    "temperature": 0.5,
     "top_p": 1,
     "frequency_penalty": 0,
     "presence_penalty": 0

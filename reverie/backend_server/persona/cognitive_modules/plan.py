@@ -18,16 +18,7 @@ from persona.prompt_template.run_gpt_prompt import *
 from persona.cognitive_modules.retrieve import *
 from persona.cognitive_modules.converse import *
 from persona.prompt_template.embedding import get_embedding
-
-class HourlyScheduleItem:
-  def __init__(self, task: str, start_time: int, duration: int = None):
-    self.task = task
-    self.start_time = start_time
-    self.duration = duration
-
-  def __repr__(self):
-    return f"HourlyScheduleItem(task={self.task}, start_time={self.start_time}, duration={self.duration})"
-
+from persona.common import HourlyScheduleItem
 ##############################################################################
 # CHAPTER 2: Generate
 ##############################################################################
@@ -147,32 +138,6 @@ def generate_hourly_schedule(persona, wake_up_hour):
   
   # Return the mapped daily requirements
   return daily_req_mapped
-
-def generate_task_decomp(persona, task, duration): 
-  """
-  A few shot decomposition of a task given the task description 
-
-  Persona state: identity stable set, curr_date_str, first_name
-
-  INPUT: 
-    persona: The Persona class instance 
-    task: the description of the task at hand in str form
-          (e.g., "waking up and starting her morning routine")
-    duration: an integer that indicates the number of minutes this task is 
-              meant to last (e.g., 60)
-  OUTPUT: 
-    a list of list where the inner list contains the decomposed task 
-    description and the number of minutes the task is supposed to last. 
-  EXAMPLE OUTPUT: 
-    [['going to the bathroom', 5], ['getting dressed', 5], 
-     ['eating breakfast', 15], ['checking her email', 5], 
-     ['getting her supplies ready for the day', 15], 
-     ['starting to work on her painting', 15]] 
-
-  """
-  if debug: print ("GNS FUNCTION: <generate_task_decomp>")
-  return run_gpt_prompt_task_decomp(persona, task, duration)[0]
-
 
 def generate_action_sector(act_desp, persona, maze): 
   """TODO 
@@ -537,21 +502,21 @@ def is_sleeping(action: HourlyScheduleItem) -> bool:
   OUTPUT: 
     a boolean. True if the action is not a sleeping action and needs to be decomposed, False otherwise. 
   """
-  task = action.task
+  task = action.task.lower()
   # If the task doesn't mention "sleep" or "bed" at all, 
   # then we assume it's not a sleeping action and should be decomposed.
   if "sleep" not in task and "bed" not in task: 
-    return True
+    return False
   # If the task is explicit about the NPC sleeping (e.g., "sleeping", "asleep", "in bed"),
   # then we don't decompose it as it's a single, continuous action.
   elif "sleeping" in task or "asleep" in task or "in bed" in task:
-    return False
+    return True
   # If "sleep" or "bed" is mentioned, but it's not explicit that the NPC is sleeping,
   # we use the duration to determine if it's a sleep or sleep-related action.
   # If the duration is more than 60 minutes, we assume it's a sleep action and don't decompose it.
   elif action.duration > 60: 
-    return False
-  return True
+    return True
+  return False
 
 def _determine_action(persona, maze): 
   """
@@ -585,13 +550,13 @@ def _determine_action(persona, maze):
       # criteria described in determine_decomp.
       if not is_sleeping(item): 
         persona.scratch.f_daily_schedule[curr_index:curr_index+1] = (
-                            generate_task_decomp(persona, item.task, item.duration))
+                            run_gpt_prompt_task_decomp(persona, item))
     if curr_index_60 + 1 < len(persona.scratch.f_daily_schedule):
       item = persona.scratch.f_daily_schedule[curr_index_60+1]
       if item.duration >= 60: 
         if not is_sleeping(item): 
           persona.scratch.f_daily_schedule[curr_index_60+1:curr_index_60+2] = (
-                            generate_task_decomp(persona, item.task, item.duration))
+                            run_gpt_prompt_task_decomp(persona, item))
 
   if curr_index_60 < len(persona.scratch.f_daily_schedule):
     # If it is not the first hour of the day, this is always invoked (it is
@@ -602,9 +567,9 @@ def _determine_action(persona, maze):
       # And we don't want to decompose after 11 pm. 
       item = persona.scratch.f_daily_schedule[curr_index_60]
       if item.duration >= 60: 
-        if not is_sleeping(item.task, item.duration): 
+        if not is_sleeping(item): 
           persona.scratch.f_daily_schedule[curr_index_60:curr_index_60+1] = (
-                              generate_task_decomp(persona, item.task, item.duration))
+                              run_gpt_prompt_task_decomp(persona, item))
   # * End of Decompose * 
 
   # Generate an <Action> instance from the action description and duration. By
@@ -619,7 +584,7 @@ def _determine_action(persona, maze):
 
   # 1440
   x_emergency = 0
-  for i in persona.scratch.f_daily_schedule: 
+  for i in persona.scratch.f_daily_schedule_hourly_org: 
     x_emergency += i.duration
   # print ("x_emergency", x_emergency)
 
