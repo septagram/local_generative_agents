@@ -3,7 +3,7 @@
   "type": "completion",
   "description": "Generate character's wake up hour",
   "completion": {
-    "max_tokens": 5,
+    "max_tokens": 10,
     "temperature": 0.8,
     "top_p": 1,
     "frequency_penalty": 0,

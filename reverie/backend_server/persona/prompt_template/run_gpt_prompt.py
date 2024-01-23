@@ -10,6 +10,7 @@ import datetime
 import sys
 import ast
 import pprint
+from typing import Any, Dict, Optional
 
 sys.path.append('../../')
 
@@ -42,8 +43,23 @@ def get_random_alphanumeric(i=6, j=6):
 
 @functor
 class run_gpt_prompt_wake_up_hour(InferenceStrategy):
-  semantic_function = skill["wake_up_hour_v1"]
-  
+  # semantic_function = skill["wake_up_hour_v1"]
+  output_type = OutputType.JSON
+  config = {
+    "max_tokens": 15,
+    "temperature": 1,
+    "top_p": 0.8,
+  }
+  prompt = """
+    {{$iss}}
+
+    What will be the {{$lifestyle}} {{$firstname}}'s wake up time today?
+
+    Provide the answer in a JSON format with only the actual time, without any reasoning or deliberation. Format the time in a 24-hour format like "H:mm" (H for hours, mm for minutes) and include it as the value for the "time" key in the JSON object. Do not include am/pm or any other information aside from the actual time. The answer should be in the following format: {"time": "H:mm"}.
+
+    Example: 
+    If the wake up time is 6:00 AM, the answer should be: {"time": "6:00"}
+  """
   def prepare_context(self, persona):
     return {
       "iss": persona.scratch.get_str_iss(),
@@ -51,11 +67,14 @@ class run_gpt_prompt_wake_up_hour(InferenceStrategy):
       "firstname": persona.scratch.get_str_firstname()
     }
 
-  def validator(self, output):
-    return "Invalid time format" if re.search(r"^[012]?\d:\d\d\b", output) is None else None
+  def validate_json(self, json: JSONType):
+    if "time" not in json:
+      return "Missing time value"
+    if re.search(r"^\s*[012]?\d:\d\d\b", json['time']) is None:
+      return "Invalid time format"
 
-  def extractor(self, output):
-    return re.search(r"^[012]?\d:\d\d\b", output).group(0)
+  def extract_json(self, json: JSONType):
+    return re.search(r"^\s*([012]?\d:\d\d)\b", json['time']).group(1)
 
   def fallback(self, persona):
     return "08:00"
@@ -74,7 +93,20 @@ OUTPUT:
 """
 @functor
 class run_gpt_prompt_daily_plan(InferenceStrategy):
-  semantic_function = skill["daily_planning_v6"]
+  # semantic_function = skill["daily_planning_v6"]
+  output_type = OutputType.JSON
+  config = {
+    "max_tokens": 500,
+    "temperature": 1,
+    "top_p": 0.8,
+  }
+  prompt = """
+    Let's consider {{$firstname}}:
+
+    {{$commonset}}
+
+    We need to draft a daily plan for {{$firstname}} in broad-strokes (with the time of the day. e.g., have a lunch at 12:00 pm, watch TV from 7 to 8 pm). The plan starts with waking up at {{$wake_up_hour}} and completing the morning routine, and it ends with going to sleep. What would be other items in the {{$firstname}}'s daily plan? Do not add any preface, just output the JSON array of items, each with properties "time" and "task". Do not indent the JSON.
+  """
 
   def prepare_context(self, persona, wake_up_hour):
     return {
@@ -84,22 +116,27 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
       "wake_up_hour": f"{str(wake_up_hour)}:00 am"
     }
 
-  def validator(self, output):
-    if len([line for line in output.split('\n') if line.strip() and line[0].isdigit()]) <= 1:
-      return "Daily plan too short or in invalid format (expected 2+ lines starting with a digit)"
+  def validate_json(self, json: JSONType):
+    if not all(isinstance(item, dict) and 'time' in item and 'task' in item for item in json):
+      return "Invalid JSON format (expected objects with 'time' and 'task' fields)"
+    # if len([line for line in output.split('\n') if line.strip() and line[0].isdigit()]) <= 1:
+    #   return "Daily plan too short or in invalid format (expected 2+ lines starting with a digit)"
 
-  def extractor(self, output):
-    return [line for line in output.split('\n') if line.strip() and line[0].isdigit()]
+  def extract_json(self, json: JSONType):
+    return [f"{item['time']} - {item['task']}" for item in json]
+    # return [line for line in output.split('\n') if line.strip() and line[0].isdigit()]
 
   def fallback(self, persona, wake_up_hour):
     return [
-      'wake up and complete the morning routine at 6:00 am', 
-      'eat breakfast at 7:00 am', 
-      'read a book from 8:00 am to 12:00 pm', 
-      'have lunch at 12:00 pm', 
-      'take a nap from 1:00 pm to 4:00 pm', 
-      'relax and watch TV from 7:00 pm to 8:00 pm', 
-      'go to bed at 11:00 pm',
+      '6:00 am - wake up and complete the morning routine', 
+      '7:00 am - eat breakfast', 
+      '8:00 am - read a book', 
+      '12:00 pm - have lunch', 
+      '1:00 pm - take a nap', 
+      '4:00 pm - relax', 
+      '7:00 pm - watch TV', 
+      '8:00 pm - relax', 
+      '11:00 pm - go to bed',
     ]
 
 # A few shot decomposition of a task given the task description 
@@ -163,7 +200,7 @@ class run_gpt_prompt_task_decomp(InferenceStrategy):
       "duration": schedule_item.duration
     }
 
-  def extractor(self, output):
+  def extract_text(self, output: str):
     # TODO SOMETHING HERE sometimes fails... See screenshot
     temp = [i.strip() for i in output.split("\n")]
     _cr = []
@@ -475,12 +512,20 @@ def run_gpt_prompt_action_game_object(action_description,
     return prompt_input
   
   def __func_validate(gpt_response, prompt=""): 
-    if len(gpt_response.strip()) < 1: 
-      return False
-    return True
+    # Extract the object name within the first pair of curly braces using non-greedy matching
+    match = re.search(r'\{(.*?)\}', gpt_response)
+    object_name = match.group(1) if match else ""
+    # Get the list of available objects from the prompt
+    available_objects = re.search(r'Objects available: \{(.*?)\}', prompt).group(1).split(", ")
+    # Check if the extracted object is in the list of available objects
+    if object_name in available_objects:
+      return True
+    return False
 
   def __func_clean_up(gpt_response, prompt=""):
-    cleaned_response = gpt_response.strip()
+    # Extract the object name within the first pair of curly braces using non-greedy matching
+    match = re.search(r'\{(.*?)\}', gpt_response)
+    cleaned_response = match.group(1) if match else ""
     return cleaned_response
 
   def get_fail_safe(): 
@@ -698,127 +743,65 @@ def run_gpt_prompt_event_triple(action_description, persona, verbose=False):
 
 
 
+@functor
+class run_gpt_prompt_act_obj_desc(InferenceStrategy):
+  semantic_function = skill['generate_obj_event_v1']
+  output_type = OutputType.JSON
 
-def run_gpt_prompt_act_obj_desc(act_game_object, act_desp, persona, verbose=False): 
-  def create_prompt_input(act_game_object, act_desp, persona): 
-    prompt_input = [act_game_object, 
-                    persona.name,
-                    act_desp,
-                    act_game_object,
-                    act_game_object]
-    return prompt_input
+  def prepare_context(self, act_game_object: str, act_desp: str, persona) -> Dict[str, str]:
+    return {
+      "object_name": act_game_object,
+      "action_description": act_desp,
+      "firstname": persona.scratch.get_str_firstname(),
+    }
   
-  def __func_clean_up(gpt_response, prompt=""):
-    cr = gpt_response.strip()
-    if cr[-1] == ".": cr = cr[:-1]
-    return cr
-
-  def __func_validate(gpt_response, prompt=""): 
-    try: 
-      gpt_response = __func_clean_up(gpt_response, prompt="")
-    except: 
-      return False
-    return True 
-
-  def get_fail_safe(act_game_object): 
-    fs = f"{act_game_object} is idle"
-    return fs
-
-  # ChatGPT Plugin ===========================================================
-  def __chat_func_clean_up(gpt_response, prompt=""): ############
-    cr = gpt_response.strip()
-    if cr[-1] == ".": cr = cr[:-1]
-    return cr
-
-  def __chat_func_validate(gpt_response, prompt=""): ############
-    try: 
-      gpt_response = __func_clean_up(gpt_response, prompt="")
-    except: 
-      return False
-    return True 
-
-  print ("asdhfapsh8p9hfaiafdsi;ldfj as DEBUG 6") ########
-  gpt_param = {"engine": "text-davinci-002", "max_tokens": 15, 
-               "temperature": 0, "top_p": 1, "stream": False,
-               "frequency_penalty": 0, "presence_penalty": 0, "stop": None}
-  prompt_template = "persona/prompt_template/v3_ChatGPT/generate_obj_event_v1.txt" ########
-  prompt_input = create_prompt_input(act_game_object, act_desp, persona)  ########
-  prompt = generate_prompt(prompt_input, prompt_template)
-  example_output = "being fixed" ########
-  special_instruction = "The output should ONLY contain the phrase that should go in <fill in>." ########
-  fail_safe = get_fail_safe(act_game_object) ########
-  output = ChatGPT_safe_generate_response(prompt, example_output, special_instruction, 3, fail_safe,
-                                          __chat_func_validate, __chat_func_clean_up, True, override_deprecated=True)
-  if output != False: 
-    return output, [output, prompt, gpt_param, prompt_input, fail_safe]
-  # ChatGPT Plugin ===========================================================
-
-
-
-  # gpt_param = {"engine": "text-davinci-003", "max_tokens": 30, 
-  #              "temperature": 0, "top_p": 1, "stream": False,
-  #              "frequency_penalty": 0, "presence_penalty": 0, "stop": ["\n"]}
-  # prompt_template = "persona/prompt_template/v2/generate_obj_event_v1.txt"
-  # prompt_input = create_prompt_input(act_game_object, act_desp, persona)
-  # prompt = generate_prompt(prompt_input, prompt_template)
-  # fail_safe = get_fail_safe(act_game_object)
-  # output = safe_generate_response(prompt, gpt_param, 5, fail_safe,
-  #                                  __func_validate, __func_clean_up)
-
-  # if debug or verbose: 
-  #   print_run_prompts(prompt_template, persona, gpt_param, 
-  #                     prompt_input, prompt, output)
+  def validate_json(self, json: JSONType) -> Optional[str]:
+    # Check for the required fields in the JSON object
+    required_fields = ["object", "user", "state"]
+    for field in required_fields:
+      if field not in json:
+        return f"Missing field: {field}"
+    # Check if the "object" field matches the lowercased object_name property
+    if json["object"].lower() != self.context_variables['object_name'].lower():
+      return "Object name mismatch"
+    # Check if the "object" field matches the lowercased object_name property
+    if json["user"] != self.context_variables['firstname']:
+      return "Object name mismatch"
   
-  # return output, [output, prompt, gpt_param, prompt_input, fail_safe]
-
-
-
-
-
-
-
-
-
-def run_gpt_prompt_act_obj_event_triple(act_game_object, act_obj_desc, persona, verbose=False): 
-  def create_prompt_input(act_game_object, act_obj_desc): 
-    prompt_input = [act_game_object, 
-                    act_obj_desc,
-                    act_game_object]
-    return prompt_input
+  def extract_json(self, json: JSONType) -> str:
+    return json['state']
   
-  def __func_clean_up(gpt_response, prompt=""):
-    cr = gpt_response.strip()
-    cr = [i.strip() for i in cr.split(")")[0].split(",")]
-    return cr
+  def fallback(self, act_game_object: str, act_desp: str, persona) -> str:
+    return f'being used by {persona.scratch.get_str_firstname()}'
 
-  def __func_validate(gpt_response, prompt=""): 
-    try: 
-      gpt_response = __func_clean_up(gpt_response, prompt="")
-      if len(gpt_response) != 2: 
-        return False
-    except: return False
-    return True 
+@functor
+class run_gpt_prompt_act_obj_event_triple(InferenceStrategy):
+  semantic_function = skill['action_object_event_triple']
+  output_type = OutputType.JSON
 
-  def get_fail_safe(act_game_object): 
-    fs = (act_game_object, "is", "idle")
-    return fs
-
-  gpt_param = {"engine": "text-davinci-003", "max_tokens": 30, 
-               "temperature": 0, "top_p": 1, "stream": False,
-               "frequency_penalty": 0, "presence_penalty": 0, "stop": ["\n"]}
-  prompt_template = "persona/prompt_template/v2/generate_event_triple_v1.txt"
-  prompt_input = create_prompt_input(act_game_object, act_obj_desc)
-  prompt = generate_prompt(prompt_input, prompt_template)
-  fail_safe = get_fail_safe(act_game_object)
-  output = safe_generate_response(prompt, gpt_param, 5, fail_safe,
-                                   __func_validate, __func_clean_up)
-  output = (act_game_object, output[0], output[1])
-
-  if debug or verbose: 
-    print_run_prompts(prompt_template, persona, gpt_param, 
-                      prompt_input, prompt, output)
+  def prepare_context(self, persona, task, act_obj_desc, object_name):
+    return {
+      "object_name": object_name,
+      "action_description": task,
+      "object_state": act_obj_desc,
+      "firstname": persona.scratch.get_str_firstname(),
+    }
   
-  return output, [output, prompt, gpt_param, prompt_input, fail_safe]
+  def validate_json(self, json: JSONType) -> Optional[str]:
+    # Check for the required fields in the JSON object
+    required_fields = ["object", "predicate", "interaction"]
+    for field in required_fields:
+      if field not in json:
+        return f"Missing field: {field}"
+    # Check if the "object" field matches the lowercased object_name property
+    if json["object"].lower() != self.context_variables['object_name'].lower():
+      return "Object name mismatch"
+    
+  def extract_json(self, json: JSONType) -> ReturnType:
+    return (json["object"], json["predicate"], json["interaction"])
+  
+  def fallback(self, persona, task, act_obj_desc, object_name): 
+    return (object_name, "is", "idle")
 
 
 

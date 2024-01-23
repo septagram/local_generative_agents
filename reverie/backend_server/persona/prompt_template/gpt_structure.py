@@ -13,7 +13,8 @@ import re
 import semantic_kernel as sk
 import traceback
 
-from typing import Callable, Dict, Optional, TypeVar
+from typing import Any, Dict, List, Union, Optional, TypeVar
+from enum import Enum, auto
 from openai import AsyncOpenAI
 from asyncio import get_event_loop
 from termcolor import colored
@@ -34,6 +35,51 @@ kernel = sk.Kernel()
 client = AsyncOpenAI(api_key=openai_api_key, base_url=base_url)
 kernel.add_chat_service("strong", LuminariaChatService(inference_model_strong, async_client=client))
 
+def inline_semantic_function(function_name: str, config: Dict[str, Any], prompt: str):
+  # Find the first sequence of spaces or tabs starting with \n
+  match = re.search(r'\n[ \t]+', prompt)
+  if match:
+    first_indentation = match.group()
+  else:
+    first_indentation = '\n'
+  prompt = prompt.strip()
+  prompt = prompt.replace(first_indentation, '\n')
+  return kernel.create_semantic_function(
+    prompt_template=prompt,
+    skill_name="simulation",
+    function_name=function_name,
+    temperature=config.get("temperature", 0.5),
+    max_tokens=config.get("max_tokens", 500),
+    # top_k=config.get("top_k", 0),
+    top_p=config.get("top_p", 0.95),
+    # min_p=config.get("min_p", 0.05),
+    frequency_penalty=config.get("frequency_penalty", 0),
+    presence_penalty=config.get("presence_penalty", 0),
+    stop_sequences=config.get("stop", None),
+  )
+
+JSONType = Union[Dict[str, Any], List[Any]]
+
+def find_and_parse_json(text: str) -> JSONType:
+  OpeningToClosingBrace = {"{": "}", "[": "]"}
+  start_indices = [text.find('{'), text.find('[')]
+  start_index = min(i for i in start_indices if i != -1)
+
+  if start_index == -1:
+    return None
+  
+  closing_brace = OpeningToClosingBrace[text[start_index]]
+  text = text[start_index:]
+
+  while True:
+    end_index = text.rfind(closing_brace)
+    if end_index == -1:
+      return None
+    try:
+      return json.loads(text[start_index:end_index+1])
+    except json.JSONDecodeError:
+      text = text[:end_index]
+
 # Define type variables
 ArgsType = TypeVar('ArgsType')  # The type of the arguments
 ReturnType = TypeVar('ReturnType')  # The type of the return value
@@ -43,21 +89,40 @@ def functor(cls):
     return cls()(*args)
   return infer
 
+class OutputType(Enum):
+  Text = auto()
+  JSON = auto()
+
 class InferenceStrategy:
   semantic_function: SKFunction = kernel.create_semantic_function(
     prompt_template="Don't answer this request. Output nothing.",
     function_name='no_reply',
   )
-  retries: int = 3
+  retries: int = 5
+  output_type: OutputType = OutputType.Text
+  prompt: Optional[str] = None
+  config: Dict[str, Any] = {}
+
+  def __init__(self):
+    if self.semantic_function and self.semantic_function != InferenceStrategy.semantic_function:
+      return
+    if isinstance(self.prompt, str):
+      self.semantic_function = inline_semantic_function(self.__class__.__name__, self.config, self.prompt)
 
   def prepare_context(self, *args: ArgsType) -> Dict[str, str]:
     return {}
   
-  def validator(self, output: str) -> Optional[str]:
+  def validate_text(self, output: str) -> Optional[str]:
+    return None
+  
+  def validate_json(self, json: JSONType) -> Optional[str]:
     return None
 
-  def extractor(self, output: str) -> ReturnType:
+  def extract_text(self, output: str) -> ReturnType:
     return output
+  
+  def extract_json(self, json: JSONType) -> ReturnType:
+    return json
   
   def fallback(self, *args: ArgsType) -> ReturnType:
     raise ValueError("LLM output didn't pass validation with no fallback function defined.")
@@ -65,8 +130,8 @@ class InferenceStrategy:
   def __call__(self, *args: ArgsType) -> ReturnType:
     # Step 1: Prepare the context
     context = kernel.create_new_context()
-    context_dict = self.prepare_context(*args)
-    for key, value in context_dict.items():
+    self.context_variables = self.prepare_context(*args)
+    for key, value in self.context_variables.items():
       context[key] = str(value)
 
     llm_output = final_output = last_error = None
@@ -94,16 +159,28 @@ class InferenceStrategy:
         #   print(colored(prompt, 'blue'))
 
         # Step 3: Invoke the semantic function
-        llm_output = str(self.semantic_function(context=context))
+        llm_output = str(self.semantic_function(context=context)).strip()
+        json_output = None
+        if self.output_type == OutputType.JSON:
+          json_output = find_and_parse_json(llm_output)
         print(colored(llm_output, 'cyan'))
 
         # Step 4: Validate the output
-        validation_error = self.validator(llm_output)
+        validation_error = None
+        if self.output_type == OutputType.JSON:
+          validation_error = self.validate_json(json_output)
+        elif self.output_type == OutputType.Text:
+          validation_error = self.validate_text(llm_output)
+        else:
+          raise ValueError(f"Unknown output type: {self.output_type}")
         if validation_error is not None:
           raise ValueError(validation_error)
 
         # Step 5: Extract the data from the output
-        final_output = self.extractor(llm_output)
+        if self.output_type == OutputType.JSON:
+          final_output = self.extract_json(json_output)
+        elif self.output_type == OutputType.Text:
+          final_output = self.extract_text(llm_output)
 
         # Successful, so break the loop
         break

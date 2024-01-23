@@ -5,28 +5,28 @@ Variables:
 <commentblockmarker>###</commentblockmarker>
 Current activity: sleep in bed
 Objects available: {bed, easel, closet, painting}
-Pick ONE most relevant object from the objects available: bed
+Pick ONE most relevant object from the objects available (only lowercase object name in curly braces): {bed}
 ---
 Current activity: painting
 Objects available: {easel, closet, sink, microwave}
-Pick ONE most relevant object from the objects available: easel
+Pick ONE most relevant object from the objects available (only lowercase object name in curly braces): {easel}
 ---
 Current activity: cooking
 Objects available: {stove, sink, fridge, counter}
-Pick ONE most relevant object from the objects available: stove
+Pick ONE most relevant object from the objects available (only lowercase object name in curly braces): {stove}
 ---
 Current activity: watch TV
 Objects available: {couch, TV, remote, coffee table}
-Pick ONE most relevant object from the objects available: TV
+Pick ONE most relevant object from the objects available (only lowercase object name in curly braces): {TV}
 ---
 Current activity: study
 Objects available: {desk, computer, chair, bookshelf}
-Pick ONE most relevant object from the objects available: desk
+Pick ONE most relevant object from the objects available (only lowercase object name in curly braces): {desk}
 ---
 Current activity: talk on the phone
 Objects available: {phone, charger, bed, nightstand}
-Pick ONE most relevant object from the objects available: phone
+Pick ONE most relevant object from the objects available (only lowercase object name in curly braces): {phone}
 ---
 Current activity: !<INPUT 0>!
 Objects available: {!<INPUT 1>!}
-Pick ONE most relevant object from the objects available:
+Pick ONE most relevant object from the objects available (only lowercase object name in curly braces):

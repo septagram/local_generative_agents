@@ -238,17 +238,6 @@ def generate_action_event_triple(act_desp, persona):
   if debug: print ("GNS FUNCTION: <generate_action_event_triple>")
   return run_gpt_prompt_event_triple(act_desp, persona)[0]
 
-
-def generate_act_obj_desc(act_game_object, act_desp, persona): 
-  if debug: print ("GNS FUNCTION: <generate_act_obj_desc>")
-  return run_gpt_prompt_act_obj_desc(act_game_object, act_desp, persona)[0]
-
-
-def generate_act_obj_event_triple(act_game_object, act_obj_desc, persona): 
-  if debug: print ("GNS FUNCTION: <generate_act_obj_event_triple>")
-  return run_gpt_prompt_act_obj_event_triple(act_game_object, act_obj_desc, persona)[0]
-
-
 def generate_convo(maze, init_persona, target_persona): 
   curr_loc = maze.access_tile(init_persona.scratch.curr_tile)
 
@@ -612,16 +601,15 @@ def _determine_action(persona, maze):
   act_pron = generate_action_pronunciatio(cur_item.task, persona)
   act_event = generate_action_event_triple(cur_item.task, persona)
   # Persona's actions also influence the object states. We set those up here. 
-  act_obj_desp = generate_act_obj_desc(act_game_object, cur_item.task, persona)
+  act_obj_desp = run_gpt_prompt_act_obj_desc(act_game_object, cur_item.task, persona)
   act_obj_pron = generate_action_pronunciatio(act_obj_desp, persona)
-  act_obj_event = generate_act_obj_event_triple(act_game_object, 
-                                                act_obj_desp, persona)
+  act_obj_event = run_gpt_prompt_act_obj_event_triple(persona, cur_item.task, act_obj_desp, act_game_object)
 
   # Adding the action to persona's queue. 
   persona.scratch.add_new_action(new_address, 
                                  cur_item.duration,
-                                 cur_item.task, 
-                                 act_pron, 
+                                 cur_item.task,
+                                 act_pron,
                                  act_event,
                                  None,
                                  None,
