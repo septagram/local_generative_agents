@@ -67,4 +67,4 @@ Action description: {{$action_description}}
 Object: {{$object_name}}
 Object state: {{$object_state}}
 
-Based on this description, provide a single JSON object in the format shown above. Do not make the "status" a generic action, such as "being used", but find a more specific word clarifying how the {{$object_name}} is being used. In addition, exclude any extraneous details not directly related to this action.
+Based on this description, provide a single JSON object in the format shown above. The "object" field must contain object name. Do not make the "status" a generic action, such as "being used", but find a more specific word clarifying how the {{$object_name}} is being used. In addition, exclude any extraneous details not directly related to this action. No intro nor Markdown, respond just with the JSON object.

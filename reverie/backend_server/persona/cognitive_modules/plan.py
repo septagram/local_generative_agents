@@ -18,7 +18,7 @@ from persona.prompt_template.run_gpt_prompt import *
 from persona.cognitive_modules.retrieve import *
 from persona.cognitive_modules.converse import *
 from persona.prompt_template.embedding import get_embedding
-from persona.common import HourlyScheduleItem
+from persona.common import HourlyScheduleItem, string_to_time
 ##############################################################################
 # CHAPTER 2: Generate
 ##############################################################################
@@ -105,7 +105,7 @@ def generate_hourly_schedule(persona, wake_up_hour):
     task = groups[1]
     
     # Convert the time string to a datetime object
-    dt = datetime.datetime.strptime(time_str, "%I:%M %p")
+    dt = string_to_time(time_str)
     
     # Calculate the minutes since midnight
     minutes_since_midnight = dt.hour * 60 + dt.minute
@@ -138,24 +138,6 @@ def generate_hourly_schedule(persona, wake_up_hour):
   
   # Return the mapped daily requirements
   return daily_req_mapped
-
-def generate_action_sector(act_desp, persona, maze): 
-  """TODO 
-  Given the persona and the task description, choose the action_sector. 
-
-  Persona state: identity stable set, n-1 day schedule, daily plan
-
-  INPUT: 
-    act_desp: description of the new action (e.g., "sleeping")
-    persona: The Persona class instance 
-  OUTPUT: 
-    action_arena (e.g., "bedroom 2")
-  EXAMPLE OUTPUT: 
-    "bedroom 2"
-  """
-  if debug: print ("GNS FUNCTION: <generate_action_sector>")
-  return run_gpt_prompt_action_sector(act_desp, persona, maze)[0]
-
 
 def generate_action_arena(act_desp, persona, maze, act_world, act_sector): 
   """TODO 
@@ -592,7 +574,7 @@ def _determine_action(persona, maze):
   # variables.
   act_world = maze.access_tile(persona.scratch.curr_tile)["world"]
   # act_sector = maze.access_tile(persona.scratch.curr_tile)["sector"]
-  act_sector = generate_action_sector(cur_item.task, persona, maze)
+  act_sector = run_gpt_prompt_action_sector(cur_item.task, persona, maze)
   act_arena = generate_action_arena(cur_item.task, persona, maze, act_world, act_sector)
   act_address = f"{act_world}:{act_sector}:{act_arena}"
   act_game_object = generate_action_game_object(cur_item.task, act_address,
