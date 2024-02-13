@@ -25,6 +25,9 @@ from persona.prompt_template.LuminariaChatService import LuminariaChatService
 
 from utils import *
 
+class DeprecatedOverrideTypes(Enum):
+  GPT4 = "gpt4"
+
 openai.api_key = openai_api_key
 if 'openai_api_base' in globals():
     openai.base_url = openai_api_base
@@ -32,10 +35,12 @@ if 'openai_api_base' in globals():
 base_url = openai_api_base if 'openai_api_base' in globals() else None
 
 kernel = sk.Kernel()
-client = AsyncOpenAI(api_key=openai_api_key, base_url=base_url)
-kernel.add_chat_service("strong", LuminariaChatService(inference_model_strong, async_client=client))
+client_local = AsyncOpenAI(api_key=openai_api_key, base_url=base_url)
+client_openai = AsyncOpenAI(api_key=openai_api_key)
+kernel.add_chat_service("strong", LuminariaChatService(inference_model_strong, async_client=client_local))
+kernel.add_chat_service("superstrong", LuminariaChatService(inference_model_superstrong, async_client=client_openai))
 
-def inline_semantic_function(function_name: str, config: Dict[str, Any], prompt: str):
+def inline_semantic_function(function_name: str, config: Dict[str, Any], prompt: str, use_openai=False):
   # Find the first sequence of spaces or tabs starting with \n
   match = re.search(r'\n[ \t]+', prompt)
   if match:
@@ -44,10 +49,12 @@ def inline_semantic_function(function_name: str, config: Dict[str, Any], prompt:
     first_indentation = '\n'
   prompt = prompt.strip()
   prompt = prompt.replace(first_indentation, '\n')
+  kernel.set_default_chat_service('superstrong' if use_openai else 'strong')
+  kernel.set_default_text_completion_service('superstrong' if use_openai else 'strong')
   return kernel.create_semantic_function(
     prompt_template=prompt,
     skill_name="simulation",
-    function_name=function_name,
+    function_name=function_name + "_gpt4" if use_openai else function_name,
     temperature=config.get("temperature", 0.5),
     max_tokens=config.get("max_tokens", 500),
     # top_k=config.get("top_k", 0),
@@ -70,14 +77,16 @@ def find_and_parse_json(text: str) -> JSONType:
   
   closing_brace = OpeningToClosingBrace[text[start_index]]
   text = text[start_index:]
+  last_error = ValueError("Expected JSON object/array")
 
   while True:
     end_index = text.rfind(closing_brace)
     if end_index == -1:
-      return None
+      raise last_error
     try:
       return json.loads(text[start_index:end_index+1])
-    except json.JSONDecodeError:
+    except json.JSONDecodeError as e:
+      last_error = e
       text = text[:end_index]
 
 # Define type variables
@@ -98,6 +107,7 @@ class InferenceStrategy:
     prompt_template="Don't answer this request. Output nothing.",
     function_name='no_reply',
   )
+  semantic_function_gpt4: Optional[SKFunction] = None
   retries: int = 5
   output_type: OutputType = OutputType.Text
   prompt: Optional[str] = None
@@ -108,6 +118,7 @@ class InferenceStrategy:
       return
     if isinstance(self.prompt, str):
       self.semantic_function = inline_semantic_function(self.__class__.__name__, self.config, self.prompt)
+      self.semantic_function_gpt4 = inline_semantic_function(self.__class__.__name__, self.config, self.prompt, use_openai=True)
 
   def prepare_context(self, *args: ArgsType) -> Dict[str, str]:
     return {}
@@ -159,7 +170,10 @@ class InferenceStrategy:
         #   print(colored(prompt, 'blue'))
 
         # Step 3: Invoke the semantic function
-        llm_output = str(self.semantic_function(context=context)).strip()
+        if i == self.retries - 1 and self.semantic_function_gpt4 is not None:
+          llm_output = str(self.semantic_function_gpt4(context=context)).strip()
+        else:
+          llm_output = str(self.semantic_function(context=context)).strip()
         json_output = None
         if self.output_type == OutputType.JSON:
           json_output = find_and_parse_json(llm_output)
@@ -202,8 +216,9 @@ class InferenceStrategy:
 def temp_sleep(seconds=0.1):
   time.sleep(seconds)
 
-def deprecated(prompt, gpt_parameter, override_deprecated=False):
+def deprecated(prompt, gpt_parameter, override_deprecated: Union[bool, DeprecatedOverrideTypes] = inference_deprecated_override):
   full_prompt = f"Without any prelude, deliberation or reasoning, continue the following block of text:\n\n{prompt}"
+  full_prompt_gpt4 = f"Without any prelude, deliberation or reasoning, continue the following block of text, the same way that GPT-3 would continue it (starting from the very next symbol):\n\n{prompt}"
   
   stack_trace = traceback.format_stack()
   function_name = None
@@ -217,11 +232,12 @@ def deprecated(prompt, gpt_parameter, override_deprecated=False):
   if function_name is None:
     function_name = re.sub(r'[^\w\d]+', '_', '_'.join(stack_trace))
 
-
+  kernel.set_default_chat_service('superstrong' if override_deprecated == DeprecatedOverrideTypes.GPT4 else 'strong')
+  kernel.set_default_text_completion_service('superstrong' if override_deprecated == DeprecatedOverrideTypes.GPT4 else 'strong')
   class LegacyPrompt(InferenceStrategy):
     semantic_function = kernel.create_semantic_function(
-      prompt_template=full_prompt,
-      function_name=function_name,
+      prompt_template=full_prompt_gpt4 if override_deprecated == DeprecatedOverrideTypes.GPT4 else full_prompt,
+      function_name=function_name + "_gpt4" if override_deprecated == DeprecatedOverrideTypes.GPT4 else function_name,
       temperature=gpt_parameter.get("temperature", 0),
       max_tokens=gpt_parameter.get("max_tokens", 500),
       top_p=gpt_parameter.get("top_p", 1),
@@ -238,7 +254,7 @@ def deprecated(prompt, gpt_parameter, override_deprecated=False):
     exit()
   return output
 
-def ChatGPT_single_request(prompt, override_deprecated=False): 
+def ChatGPT_single_request(prompt, override_deprecated = inference_deprecated_override): 
   temp_sleep()
   return deprecated(prompt, {}, override_deprecated)
 
@@ -253,7 +269,7 @@ def ChatGPT_single_request(prompt, override_deprecated=False):
 # #####################[SECTION 1: CHATGPT-3 STRUCTURE] ######################
 # ============================================================================
 
-def GPT4_request(prompt, override_deprecated=False): 
+def GPT4_request(prompt, override_deprecated: Union[bool, DeprecatedOverrideTypes] = inference_deprecated_override): 
   """
   Given a prompt and a dictionary of GPT parameters, make a request to OpenAI
   server and returns the response. 
@@ -280,7 +296,7 @@ def GPT4_request(prompt, override_deprecated=False):
     return "ChatGPT ERROR"
 
 
-def ChatGPT_request(prompt, override_deprecated=False): 
+def ChatGPT_request(prompt, override_deprecated: Union[bool, DeprecatedOverrideTypes] = inference_deprecated_override): 
   """
   Given a prompt and a dictionary of GPT parameters, make a request to OpenAI
   server and returns the response. 
@@ -314,7 +330,7 @@ def GPT4_safe_generate_response(prompt,
                                    func_validate=None,
                                    func_clean_up=None,
                                    verbose=False,
-                                   override_deprecated=False): 
+                                   override_deprecated: Union[bool, DeprecatedOverrideTypes] = inference_deprecated_override): 
   prompt = 'GPT-3 Prompt:\n"""\n' + prompt + '\n"""\n'
   prompt += f"Output the response to the prompt above in json. {special_instruction}\n"
   prompt += "Example output json:\n"
@@ -354,7 +370,7 @@ def ChatGPT_safe_generate_response(prompt,
                                    func_validate=None,
                                    func_clean_up=None,
                                    verbose=False,
-                                   override_deprecated=False): 
+                                   override_deprecated: Union[bool, DeprecatedOverrideTypes] = inference_deprecated_override): 
   # prompt = 'GPT-3 Prompt:\n"""\n' + prompt + '\n"""\n'
   prompt = '"""\n' + prompt + '\n"""\n'
   prompt += f"Output the response to the prompt above in json. {special_instruction}\n"
@@ -368,7 +384,10 @@ def ChatGPT_safe_generate_response(prompt,
   for i in range(repeat): 
 
     try: 
-      curr_gpt_response = ChatGPT_request(prompt, override_deprecated).strip()
+      if i == repeat - 1:
+        curr_gpt_response = ChatGPT_request(prompt, DeprecatedOverrideTypes.GPT4).strip()
+      else:
+        curr_gpt_response = ChatGPT_request(prompt, override_deprecated).strip()
       end_index = curr_gpt_response.rfind('}') + 1
       curr_gpt_response = curr_gpt_response[:end_index]
       curr_gpt_response = json.loads(curr_gpt_response)["output"]
@@ -397,7 +416,7 @@ def ChatGPT_safe_generate_response_OLD(prompt,
                                    func_validate=None,
                                    func_clean_up=None,
                                    verbose=False,
-                                   override_deprecated=False): 
+                                   override_deprecated: Union[bool, DeprecatedOverrideTypes] = inference_deprecated_override): 
   if verbose: 
     print ("CHAT GPT PROMPT")
     print (prompt)
@@ -422,7 +441,7 @@ def ChatGPT_safe_generate_response_OLD(prompt,
 # ###################[SECTION 2: ORIGINAL GPT-3 STRUCTURE] ###################
 # ============================================================================
 
-def GPT_request(prompt, gpt_parameter, override_deprecated=False): 
+def GPT_request(prompt, gpt_parameter, override_deprecated: Union[bool, DeprecatedOverrideTypes] = inference_deprecated_override): 
   """
   Given a prompt and a dictionary of GPT parameters, make a request to OpenAI
   server and returns the response. 
@@ -488,12 +507,16 @@ def safe_generate_response(prompt,
                            func_validate=None,
                            func_clean_up=None,
                            verbose=False,
-                           override_deprecated=False): 
+                           override_deprecated: Union[bool, DeprecatedOverrideTypes] = inference_deprecated_override): 
   if verbose: 
     print (prompt)
 
   for i in range(repeat): 
-    curr_gpt_response = GPT_request(prompt, gpt_parameter, override_deprecated=override_deprecated)
+    curr_gpt_response = None
+    if i == repeat - 1:
+      curr_gpt_response = GPT_request(prompt, gpt_parameter, override_deprecated=DeprecatedOverrideTypes.GPT4)
+    else:
+      curr_gpt_response = GPT_request(prompt, gpt_parameter, override_deprecated=override_deprecated)
     if func_validate(curr_gpt_response, prompt=prompt): 
       return func_clean_up(curr_gpt_response, prompt=prompt)
     if verbose: 
