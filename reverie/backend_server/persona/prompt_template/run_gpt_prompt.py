@@ -105,7 +105,13 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
 
     {{$commonset}}
 
-    We need to draft a daily plan for {{$firstname}} in broad-strokes (with the time of the day. e.g., have a lunch at 12:00 pm, watch TV from 7 to 8 pm). The plan starts with waking up at {{$wake_up_hour}} and completing the morning routine, and it ends with going to sleep. What would be other items in the {{$firstname}}'s daily plan? Do not add any preface, just output the JSON array of items, each with properties "time" and "task". Do not indent the JSON.
+    We need to draft a daily plan for {{$firstname}} in broad-strokes (with the time of the day. e.g., have a lunch at 12:00 pm, watch TV from 7 to 8 pm). The plan must be formatted as a single JSON array of objects, each object containing the following fields:
+    
+    * start: start time with am/pm
+    * end: end time with am/pm
+    * activity: the activity {{$firstname}} is performing, in plain text
+
+    The entries must be in the correct order and must not intersect. The plan starts with waking up at {{$wake_up_hour}} and completing the morning routine, and it ends with going to sleep. What would be other items in the {{$firstname}}'s daily plan?
   """
 
   def prepare_context(self, persona, wake_up_hour):
@@ -119,22 +125,25 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
   def validate_json(self, json: JSONType):
     if not isinstance(json, list):
       return "Invalid JSON format (expected a JSON array)"
-    if not all(isinstance(item, dict) and 'time' in item and 'task' in item for item in json):
-      return "Invalid JSON format (expected an array of objects with 'time' and 'task' fields)"
+    if not all(isinstance(item, dict) and 'start' in item and 'end' in item and 'activity' in item for item in json):
+      return "Invalid JSON format (expected an array of objects with 'time' and 'activity' fields)"
     prev_time = None
+    prev_task = None
     for item in json:
-      if not is_valid_time(item["time"]):
-        return f'Invalid time format: "{item["time"]}". Example time format: "6:00 am".'
-      time = string_to_time(item["time"])
+      for field in ["start", "end"]:
+        if not is_valid_time(item[field]):
+          return f'Invalid {field} time format: "{item[field]}". Example time format: "6:00 am".'
+      time = string_to_time(item["start"])
       # For night owls, activities may continue past midnight and resume before the "wake-up" time.
       # This condition allows for time entries after midnight but before the first entry's time,
       # accommodating a schedule that doesn't strictly follow chronological order across days.
-      if prev_time and time <= prev_time and time > string_to_time(json[0]["time"]):
-        raise ValueError("Time is not in chronological order.")
-      prev_time = time
+      if prev_time and time < prev_time and time > string_to_time(json[0]["start"]):
+        raise ValueError(f'Tasks are not in chronological order. "{prev_task}" intersects with "{item["activity"]}"')
+      prev_time = string_to_time(item["end"])
+      prev_task = item["activity"]
 
   def extract_json(self, json: JSONType):
-    return [f"{item['time']} - {item['task']}" for item in json]
+    return [f"{item['start']} - {item['activity']}" for item in json]
     # return [line for line in output.split('\n') if line.strip() and line[0].isdigit()]
 
   def fallback(self, persona, wake_up_hour):
