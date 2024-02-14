@@ -117,8 +117,10 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
     }
 
   def validate_json(self, json: JSONType):
+    if not isinstance(json, list):
+      return "Invalid JSON format (expected a JSON array)"
     if not all(isinstance(item, dict) and 'time' in item and 'task' in item for item in json):
-      return "Invalid JSON format (expected objects with 'time' and 'task' fields)"
+      return "Invalid JSON format (expected an array of objects with 'time' and 'task' fields)"
     prev_time = None
     for item in json:
       if not is_valid_time(item["time"]):
@@ -168,7 +170,53 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
 #     ['starting to work on her painting', 15]] 
 @functor
 class run_gpt_prompt_task_decomp(InferenceStrategy):
-  semantic_function = skill["task_decomp_v3"]
+  output_type = OutputType.JSON
+  config = {
+    "max_tokens": 1000,
+    "temperature": 0.5,
+    "top_p": 1,
+  }
+  prompt = """
+    Let's perform task decomposition, breaking down a larger activity into smaller, manageable subtasks. Each subtask will be detailed in a JSON array, providing a structured and clear view of the task's components. The JSON object for each subtask will include the following fields:
+
+    - i (or "index"): A sequential number representing the order of the subtask.
+    - action: A brief description of the subtask being performed.
+    - duration: The time allocated for this subtask, in minutes.
+    - timeLeft: The remaining time until the activity's completion, in minutes.
+
+    Here's an example of how it can be done:
+
+    Name: Kelly Bronson
+    Age: 35
+    Backstory: Kelly always wanted to be a teacher, and now she teaches kindergarten. During the week, she dedicates herself to her students, but on the weekends, she likes to try out new restaurants and hang out with friends. She is very warm and friendly, and loves caring for others.
+    Personality: sweet, gentle, meticulous
+    Location: Kelly is in an older condo that has the following areas: {kitchen, bedroom, dining, porch, office, bathroom, living room, hallway}.
+    Currently: Kelly is a teacher during the school year. She teaches at the school but works on lesson plans at home. She is currently living alone in a single bedroom condo.
+    Daily plan requirement: Kelly is planning to teach during the morning and work from home in the afternoon.
+
+    Today is Saturday May 10. From 08:00am ~ 09:00am, Kelly is planning on having breakfast, from 09:00am ~ 12:00pm, Kelly is planning on working on the next day's kindergarten lesson plan, and from 12:00 ~ 13pm, Kelly is planning on taking a break. 
+
+    Given the total duration of 180 minutes for this task, here's how Kelly's subtasks can be represented in a JSON array:
+
+    [
+      {"i": 1, "action": "Reviewing curriculum standards", "duration": 15, "timeLeft": 165},
+      {"i": 2, "action": "Brainstorming lesson ideas", "duration": 30, "timeLeft": 135},
+      {"i": 3, "action": "Creating the lesson plan", "duration": 30, "timeLeft": 105},
+      {"i": 4, "action": "Creating materials for the lesson", "duration": 30, "timeLeft": 75},
+      {"i": 5, "action": "Taking a short break", "duration": 15, "timeLeft": 60},
+      {"i": 6, "action": "Reviewing the lesson plan", "duration": 30, "timeLeft": 30},
+      {"i": 7, "action": "Making final adjustments to the lesson plan", "duration": 15, "timeLeft": 15},
+      {"i": 8, "action": "Printing the lesson plan", "duration": 10, "timeLeft": 5},
+      {"i": 9, "action": "Packing the lesson plan in her bag", "duration": 5, "timeLeft": 0}
+    ]
+
+    Now, let's consider {{$firstname}}, who is about to perform the task "{{$task}}".
+
+    {{$commonset}}
+    {{$surrounding_schedule}}
+
+    In 5 min increments, list the subtasks {{$firstname}} does when performing the task "{{$task}}" from {{$time_range}} (total duration in minutes {{$duration}}) as a JSON array in the format specified.
+  """
 
   def prepare_context(self, persona, schedule_item: HourlyScheduleItem):
     # The complex part is producing the surrounding schedule.
@@ -209,56 +257,22 @@ class run_gpt_prompt_task_decomp(InferenceStrategy):
       "duration": schedule_item.duration
     }
 
-  def extract_text(self, output: str):
-    # TODO SOMETHING HERE sometimes fails... See screenshot
-    temp = [i.strip() for i in output.split("\n")]
-    _cr = []
-    cr = []
-    for count, i in enumerate(temp): 
-      if count != 0: 
-        _cr += [" ".join([j.strip () for j in i.split(" ")][3:])]
-      else: 
-        _cr += [i]
-    for count, i in enumerate(_cr): 
-      k = [j.strip() for j in i.split("(duration in minutes:")]
-      task = k[0]
-      task = re.sub(r'[^\w\d]*$', '', task)
-      duration = int(re.findall(r'\d+', k[1])[0])
-      cr += [[task, duration]]
+  def validate_json(self, json: JSONType):
+    if not isinstance(json, list):
+      return "Invalid JSON format (expected a JSON array)"
+    if not all(isinstance(item, dict) and 'action' in item and 'duration' in item for item in json):
+      return "Invalid JSON format (expected an array of objects with 'action' and 'duration' fields)"
+    if not all(isinstance(item['duration'], (int, float)) for item in json):
+      return "Invalid JSON format (the 'duration' field must be a number)"
 
-    total_expected_min = self.schedule_item.duration
-    
-    # TODO -- now, you need to make sure that this is the same as the sum of 
-    #         the current action sequence. 
-    curr_min_slot = [["dummy", -1],] # (task_name, task_index)
-    for count, i in enumerate(cr): 
-      i_task = i[0] 
-      i_duration = i[1]
-
-      i_duration -= (i_duration % 5)
-      if i_duration > 0: 
-        for j in range(i_duration): 
-          curr_min_slot += [(i_task, count)]       
-    curr_min_slot = curr_min_slot[1:]   
-
-    if len(curr_min_slot) > total_expected_min: 
-      last_task = curr_min_slot[60]
-      for i in range(1, 6): 
-        curr_min_slot[-1 * i] = last_task
-    elif len(curr_min_slot) < total_expected_min: 
-      last_task = curr_min_slot[-1]
-      for i in range(total_expected_min - len(curr_min_slot)):
-        curr_min_slot += [last_task]
-
-    cr_ret = [["dummy", -1],]
-    for task, task_index in curr_min_slot: 
-      if task != cr_ret[-1][0]: 
-        cr_ret += [[task, 1]]
-      else: 
-        cr_ret[-1][1] += 1
-    cr = cr_ret[1:]
-
-    return cr
+  def extract_json(self, json: JSONType):
+    total_duration = sum(subtask['duration'] for subtask in json)
+    expected_duration = self.schedule_item.duration
+    if total_duration != expected_duration:
+      adjustment_ratio = expected_duration / total_duration
+      return [[subtask['action'], int(subtask['duration'] * adjustment_ratio)] for subtask in json]
+    else:
+      return [[subtask['action'], subtask['duration']] for subtask in json]
 
   def fallback(self, persona, schedule_item):
     return [[schedule_item.task, schedule_item.duration]]
