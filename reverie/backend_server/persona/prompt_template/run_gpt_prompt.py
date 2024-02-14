@@ -313,7 +313,7 @@ class run_gpt_prompt_action_sector(InferenceStrategy):
     All Sectors: {{$all_sectors}}.
     Pick the Sector for performing {{$name}}'s current activity.
     * Stay in the current sector if the activity can be done there. Only go out if the activity needs to take place in another place.
-    * Must be one of the sectors from "All Sectors," verbatim.
+    * Must be one of the sectors from "All Sectors," verbatim. It must be a Sector, and not an Arena.
     * If none of those fit very well, we must still choose the one that's the closest fit.
     * Return the answer as a JSON object with a single key "area". The value is the chosen area name.
     For performing the {{$action_description}} Action, {{$name}} should go to the following Sector:
