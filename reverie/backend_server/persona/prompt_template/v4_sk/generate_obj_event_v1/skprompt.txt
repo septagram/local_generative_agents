@@ -2,4 +2,4 @@ We want to write an object description and to understand the state of an object 
 
 {"object":"generator","user":"Jack","state":"being fixed"}
 
-Now, let's consider {{$object_name}}. {{$firstname}} is currently performing the task "{{$task}}", interacting with the {{$object_name}}. Describe the interaction in the same form as above.
+Now, let's consider {{$object_name}}. {{$firstname}} is currently performing the task "{{$action_description}}", interacting with the {{$object_name}}. Describe the interaction in the same form as above.
