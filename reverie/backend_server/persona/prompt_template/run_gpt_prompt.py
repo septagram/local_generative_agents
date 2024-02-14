@@ -11,6 +11,7 @@ import sys
 import ast
 import pprint
 from typing import Any, Dict, Optional
+from random import Random
 
 sys.path.append('../../')
 
@@ -126,7 +127,8 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
     if not isinstance(json, list):
       return "Invalid JSON format (expected a JSON array)"
     if not all(isinstance(item, dict) and 'start' in item and 'end' in item and 'activity' in item for item in json):
-      return "Invalid JSON format (expected an array of objects with 'time' and 'activity' fields)"
+      return "Invalid JSON format (expected an array of objects with 'start', 'end' and 'activity' fields)"
+    wake_up_time = string_to_time(json[0]["start"])
     prev_time = None
     prev_task = None
     for item in json:
@@ -137,13 +139,25 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
       # For night owls, activities may continue past midnight and resume before the "wake-up" time.
       # This condition allows for time entries after midnight but before the first entry's time,
       # accommodating a schedule that doesn't strictly follow chronological order across days.
-      if prev_time and time < prev_time and time > string_to_time(json[0]["start"]):
+      is_past_midnight = time < wake_up_time and prev_time > wake_up_time
+      if prev_time and time < prev_time and not is_past_midnight:
         raise ValueError(f'Tasks are not in chronological order. "{prev_task}" intersects with "{item["activity"]}"')
       prev_time = string_to_time(item["end"])
       prev_task = item["activity"]
 
   def extract_json(self, json: JSONType):
-    return [f"{item['start']} - {item['activity']}" for item in json]
+    rng = Random(str(json))
+    activities = ["Relax", "Rest", "Chill", "Procrastinate"]
+    result = []
+    for i, item in enumerate(json):
+      if i != 0:
+        start = item['start']
+        prev_end = json[i-1]['end']
+        if string_to_time(start) != string_to_time(prev_end):
+          random_activity = rng.choice(activities)
+          result.append(f"{prev_end} - {random_activity}")
+      result.append(f"{item['start']} - {item['activity']}")
+    return result
     # return [line for line in output.split('\n') if line.strip() and line[0].isdigit()]
 
   def fallback(self, persona, wake_up_hour):
@@ -301,7 +315,7 @@ class run_gpt_prompt_action_sector(InferenceStrategy):
     We need to choose an appropriate Sector for the task at hand.
 
     * Stay in the current sector if the activity can be done there. Only go out if the activity needs to take place in another place.
-    * Must be one of the sectors from "All Sectors," verbatim.
+    * Must be one of the sectors from "All Sectors," verbatim. It must be a Sector, and not an Arena.
     * If none of those fit very well, we must still choose the one that's the closest fit.
     * Return the answer as a JSON object with a single key "area". The value is the chosen area name.
 
