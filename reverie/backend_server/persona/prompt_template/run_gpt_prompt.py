@@ -97,7 +97,7 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
   # semantic_function = skill["daily_planning_v6"]
   output_type = OutputType.JSON
   config = {
-    "max_tokens": 500,
+    "max_tokens": 1000,
     "temperature": 1,
     "top_p": 0.8,
   }

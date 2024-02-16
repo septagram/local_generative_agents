@@ -8,9 +8,13 @@ from persona.prompt_template.DebugCache import DebugCache
 class LuminariaChatService(OpenAIChatCompletion):
   # System message to be included in every request
   _SYSTEM_MESSAGE = {
-    'role': 'system',
+    'role': 'assistant', #'system',
     'content': system_prompt.strip()
   }
+  # Yet we set the role to "assistant", because text-generation-webui ignores system message,
+  # at least for Mistral Instruct.
+  #
+  # See https://tree.taiga.io/project/septagram-ai-town/issue/82
 
   async def _send_request(self, prompt: Optional[str] = None, messages: Optional[List[Dict[str, str]]] = None, **kwargs):
     # Include the system message in every request
