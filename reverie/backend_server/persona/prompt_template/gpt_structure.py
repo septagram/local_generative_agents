@@ -84,7 +84,7 @@ def find_and_parse_json(text: str) -> JSONType:
     if end_index == -1:
       raise last_error
     try:
-      return json.loads(text[start_index:end_index+1])
+      return json.loads(text[:end_index+1])
     except json.JSONDecodeError as e:
       last_error = e
       text = text[:end_index]
@@ -174,10 +174,10 @@ class InferenceStrategy:
           llm_output = str(self.semantic_function_gpt4(context=context)).strip()
         else:
           llm_output = str(self.semantic_function(context=context)).strip()
+        print(colored(llm_output, 'cyan'))
         json_output = None
         if self.output_type == OutputType.JSON:
           json_output = find_and_parse_json(llm_output)
-        print(colored(llm_output, 'cyan'))
 
         # Step 4: Validate the output
         validation_error = None
@@ -201,13 +201,14 @@ class InferenceStrategy:
 
       except Exception as e:
         last_error = e
+        print(colored(f"Error in interaction with {self.semantic_function.name}: {str(last_error)}", 'red'))
+        traceback.print_exception(type(last_error), last_error, last_error.__traceback__)
 
     if last_error is None:
       if final_output != llm_output:
         print(colored(f"Final output: {final_output}", 'light_green'))
       return final_output
     else:
-      print(colored(f"Error in interaction with {self.semantic_function.name}: {str(last_error)}", 'red'))
       if strict_errors:
         raise last_error
       else:
