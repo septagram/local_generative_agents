@@ -1,4 +1,0 @@
-Convert an action description to an emoji (important: use two or less emojis).
-
-Action description: {{$input}}
-Emoji:
