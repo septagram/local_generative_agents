@@ -20,6 +20,8 @@ from persona.prompt_template.gpt_structure import *
 from persona.prompt_template.print_prompt import *
 from persona.common import HourlyScheduleItem, is_valid_time, string_to_time
 
+from persona.prompt_template.InferenceStrategySK import kernel, JSONType, ReturnType, functor, OutputType, InferenceStrategySK
+
 kernel.set_default_chat_service("strong")
 skill = kernel.import_semantic_skill_from_directory("persona/prompt_template", "v4_sk")
 
@@ -43,7 +45,7 @@ def get_random_alphanumeric(i=6, j=6):
 ##############################################################################
 
 @functor
-class run_gpt_prompt_wake_up_hour(InferenceStrategy):
+class run_gpt_prompt_wake_up_hour(InferenceStrategySK):
   # semantic_function = skill["wake_up_hour_v1"]
   output_type = OutputType.JSON
   config = {
@@ -93,7 +95,7 @@ OUTPUT:
   a list of daily actions in broad strokes.
 """
 @functor
-class run_gpt_prompt_daily_plan(InferenceStrategy):
+class run_gpt_prompt_daily_plan(InferenceStrategySK):
   # semantic_function = skill["daily_planning_v6"]
   output_type = OutputType.JSON
   config = {
@@ -192,7 +194,7 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
 #     ['getting her supplies ready for the day', 15], 
 #     ['starting to work on her painting', 15]] 
 @functor
-class run_gpt_prompt_task_decomp(InferenceStrategy):
+class run_gpt_prompt_task_decomp(InferenceStrategySK):
   output_type = OutputType.JSON
   config = {
     "max_tokens": 1000,
@@ -306,7 +308,7 @@ class run_gpt_prompt_task_decomp(InferenceStrategy):
     return time.strftime("%H:%M %p").lower()
 
 @functor
-class run_gpt_prompt_action_sector(InferenceStrategy):
+class run_gpt_prompt_action_sector(InferenceStrategySK):
   output_type = OutputType.JSON
   config =  {
     "temperature": 0.3,
@@ -719,7 +721,7 @@ def run_gpt_prompt_event_triple(action_description, persona, verbose=False):
 
 
 @functor
-class run_gpt_prompt_act_obj_desc(InferenceStrategy):
+class run_gpt_prompt_act_obj_desc(InferenceStrategySK):
   semantic_function = skill['generate_obj_event_v1']
   output_type = OutputType.JSON
 
@@ -750,7 +752,7 @@ class run_gpt_prompt_act_obj_desc(InferenceStrategy):
     return f'being used by {persona.scratch.get_str_firstname()}'
 
 @functor
-class run_gpt_prompt_act_obj_event_triple(InferenceStrategy):
+class run_gpt_prompt_act_obj_event_triple(InferenceStrategySK):
   semantic_function = skill['action_object_event_triple']
   output_type = OutputType.JSON
 
