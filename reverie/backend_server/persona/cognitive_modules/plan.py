@@ -19,6 +19,13 @@ from persona.cognitive_modules.retrieve import *
 from persona.cognitive_modules.converse import *
 from persona.prompt_template.embedding import get_embedding
 from persona.common import HourlyScheduleItem, string_to_time
+from persona.prompts.run_gpt_prompt_wake_up_hour import run_gpt_prompt_wake_up_hour
+from persona.prompts.run_gpt_prompt_daily_plan import run_gpt_prompt_daily_plan
+from persona.prompts.run_gpt_prompt_task_decomp import run_gpt_prompt_task_decomp
+from persona.prompts.run_gpt_prompt_action_sector import run_gpt_prompt_action_sector
+from persona.prompts.run_gpt_prompt_act_obj_desc import run_gpt_prompt_act_obj_desc
+from persona.prompts.run_gpt_prompt_act_obj_event_triple import run_gpt_prompt_act_obj_event_triple
+
 ##############################################################################
 # CHAPTER 2: Generate
 ##############################################################################
