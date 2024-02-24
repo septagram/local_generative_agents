@@ -1,9 +1,9 @@
 from typing import Dict, Optional
 
-from persona.prompt_template.InferenceStrategySK import JSONType, OutputType, functor, InferenceStrategySK
+from persona.prompt_template.InferenceStrategy import JSONType, OutputType, functor, InferenceStrategy
 
 @functor
-class run_gpt_prompt_act_obj_desc(InferenceStrategySK):
+class run_gpt_prompt_act_obj_desc(InferenceStrategy):
   output_type = OutputType.JSON
   config = {
     "max_tokens": 50,
@@ -13,9 +13,9 @@ class run_gpt_prompt_act_obj_desc(InferenceStrategySK):
   prompt = """
     We want to write an object description and to understand the state of an object that is being used by someone. For example, if Jack is fixing the generator, the description would state:
 
-    {"object":"generator","user":"Jack","state":"being fixed"}
+    {{"object":"generator","user":"Jack","state":"being fixed"}}
 
-    Now, let's consider {{$object_name}}. {{$firstname}} is currently performing the task "{{$action_description}}", interacting with the {{$object_name}}. Describe the interaction in the same form as above.
+    Now, let's consider {object_name}. {firstname} is currently performing the task "{action_description}", interacting with the {object_name}. Describe the interaction in the same form as above.
   """
 
   def prepare_context(self, act_game_object: str, act_desp: str, persona) -> Dict[str, str]:

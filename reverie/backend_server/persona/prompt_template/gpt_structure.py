@@ -13,7 +13,7 @@ import traceback
 from typing import Union
 from termcolor import colored
 
-from persona.prompt_template.InferenceStrategySK import DeprecatedOverrideTypes, kernel, InferenceStrategySK
+from persona.prompt_template.InferenceStrategy import DeprecatedOverrideTypes, inline_semantic_function
 
 from utils import *
 
@@ -36,22 +36,14 @@ def deprecated(prompt, gpt_parameter, override_deprecated: Union[bool, Deprecate
   if function_name is None:
     function_name = re.sub(r'[^\w\d]+', '_', '_'.join(stack_trace))
 
-  kernel.set_default_chat_service('superstrong' if override_deprecated == DeprecatedOverrideTypes.GPT4 else 'strong')
-  kernel.set_default_text_completion_service('superstrong' if override_deprecated == DeprecatedOverrideTypes.GPT4 else 'strong')
-  class LegacyPrompt(InferenceStrategySK):
-    semantic_function = kernel.create_semantic_function(
-      prompt_template=full_prompt_gpt4 if override_deprecated == DeprecatedOverrideTypes.GPT4 else full_prompt,
-      function_name=function_name + "_gpt4" if override_deprecated == DeprecatedOverrideTypes.GPT4 else function_name,
-      temperature=gpt_parameter.get("temperature", 0),
-      max_tokens=gpt_parameter.get("max_tokens", 500),
-      top_p=gpt_parameter.get("top_p", 1),
-      frequency_penalty=gpt_parameter.get("frequency_penalty", 0),
-      presence_penalty=gpt_parameter.get("presence_penalty", 0),
-      stop_sequences=gpt_parameter.get("stop", None),
-    )
-    retries = 1
+  legacyInference = inline_semantic_function(
+    function_name + "_gpt4" if override_deprecated == DeprecatedOverrideTypes.GPT4 else function_name,
+    gpt_parameter,
+    full_prompt_gpt4 if override_deprecated == DeprecatedOverrideTypes.GPT4 else full_prompt,
+    override_deprecated == DeprecatedOverrideTypes.GPT4,
+  )
 
-  output = str(LegacyPrompt()())
+  output = str(legacyInference())
   if not override_deprecated:
     traceback.print_stack()
     print(colored(f"The function {function_name} is deprecated and will be removed.", 'red'))

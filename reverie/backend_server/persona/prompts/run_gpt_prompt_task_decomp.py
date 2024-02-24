@@ -1,7 +1,7 @@
 import datetime
 
 from persona.common import HourlyScheduleItem
-from persona.prompt_template.InferenceStrategySK import JSONType, OutputType, functor, InferenceStrategySK
+from persona.prompt_template.InferenceStrategy import JSONType, OutputType, functor, InferenceStrategy
 
 # A few shot decomposition of a task given the task description 
 #
@@ -22,7 +22,7 @@ from persona.prompt_template.InferenceStrategySK import JSONType, OutputType, fu
 #     ['getting her supplies ready for the day', 15], 
 #     ['starting to work on her painting', 15]] 
 @functor
-class run_gpt_prompt_task_decomp(InferenceStrategySK):
+class run_gpt_prompt_task_decomp(InferenceStrategy):
   output_type = OutputType.JSON
   config = {
     "max_tokens": 1000,
@@ -43,7 +43,7 @@ class run_gpt_prompt_task_decomp(InferenceStrategySK):
     Age: 35
     Backstory: Kelly always wanted to be a teacher, and now she teaches kindergarten. During the week, she dedicates herself to her students, but on the weekends, she likes to try out new restaurants and hang out with friends. She is very warm and friendly, and loves caring for others.
     Personality: sweet, gentle, meticulous
-    Location: Kelly is in an older condo that has the following areas: {kitchen, bedroom, dining, porch, office, bathroom, living room, hallway}.
+    Location: Kelly is in an older condo that has the following areas: {{kitchen, bedroom, dining, porch, office, bathroom, living room, hallway}}.
     Currently: Kelly is a teacher during the school year. She teaches at the school but works on lesson plans at home. She is currently living alone in a single bedroom condo.
     Daily plan requirement: Kelly is planning to teach during the morning and work from home in the afternoon.
 
@@ -52,23 +52,23 @@ class run_gpt_prompt_task_decomp(InferenceStrategySK):
     Given the total duration of 180 minutes for this task, here's how Kelly's subtasks can be represented in a JSON array:
 
     [
-      {"i": 1, "action": "Reviewing curriculum standards", "duration": 15, "timeLeft": 165},
-      {"i": 2, "action": "Brainstorming lesson ideas", "duration": 30, "timeLeft": 135},
-      {"i": 3, "action": "Creating the lesson plan", "duration": 30, "timeLeft": 105},
-      {"i": 4, "action": "Creating materials for the lesson", "duration": 30, "timeLeft": 75},
-      {"i": 5, "action": "Taking a short break", "duration": 15, "timeLeft": 60},
-      {"i": 6, "action": "Reviewing the lesson plan", "duration": 30, "timeLeft": 30},
-      {"i": 7, "action": "Making final adjustments to the lesson plan", "duration": 15, "timeLeft": 15},
-      {"i": 8, "action": "Printing the lesson plan", "duration": 10, "timeLeft": 5},
-      {"i": 9, "action": "Packing the lesson plan in her bag", "duration": 5, "timeLeft": 0}
+      {{"i": 1, "action": "Reviewing curriculum standards", "duration": 15, "timeLeft": 165}},
+      {{"i": 2, "action": "Brainstorming lesson ideas", "duration": 30, "timeLeft": 135}},
+      {{"i": 3, "action": "Creating the lesson plan", "duration": 30, "timeLeft": 105}},
+      {{"i": 4, "action": "Creating materials for the lesson", "duration": 30, "timeLeft": 75}},
+      {{"i": 5, "action": "Taking a short break", "duration": 15, "timeLeft": 60}},
+      {{"i": 6, "action": "Reviewing the lesson plan", "duration": 30, "timeLeft": 30}},
+      {{"i": 7, "action": "Making final adjustments to the lesson plan", "duration": 15, "timeLeft": 15}},
+      {{"i": 8, "action": "Printing the lesson plan", "duration": 10, "timeLeft": 5}},
+      {{"i": 9, "action": "Packing the lesson plan in her bag", "duration": 5, "timeLeft": 0}}
     ]
 
-    Now, let's consider {{$firstname}}, who is about to perform the task "{{$task}}".
+    Now, let's consider {firstname}, who is about to perform the task "{task}".
 
-    {{$commonset}}
-    {{$surrounding_schedule}}
+    {commonset}
+    {surrounding_schedule}
 
-    In 5 min increments, list the subtasks {{$firstname}} does when performing the task "{{$task}}" from {{$time_range}} (total duration in minutes {{$duration}}) as a JSON array in the format specified.
+    In 5 min increments, list the subtasks {firstname} does when performing the task "{task}" from {time_range} (total duration in minutes {duration}) as a JSON array in the format specified.
   """
 
   def prepare_context(self, persona, schedule_item: HourlyScheduleItem):

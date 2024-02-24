@@ -1,7 +1,9 @@
 from random import Random
+from langchain_core.runnables import chain
+from langchain_core.prompts import ChatPromptTemplate
 
 from persona.common import is_valid_time, string_to_time
-from persona.prompt_template.InferenceStrategySK import JSONType, OutputType, functor, InferenceStrategySK
+from persona.prompt_template.InferenceStrategy import JSONType, OutputType, functor, InferenceStrategy
 
 """
 Basically the long term planning that spans a day. Returns a list of actions
@@ -16,8 +18,7 @@ OUTPUT:
   a list of daily actions in broad strokes.
 """
 @functor
-class run_gpt_prompt_daily_plan(InferenceStrategySK):
-  # semantic_function = skill["daily_planning_v6"]
+class run_gpt_prompt_daily_plan(InferenceStrategy):
   output_type = OutputType.JSON
   config = {
     "max_tokens": 1000,
@@ -25,17 +26,17 @@ class run_gpt_prompt_daily_plan(InferenceStrategySK):
     "top_p": 0.8,
   }
   prompt = """
-    Let's consider {{$firstname}}:
+    Let's consider {firstname}:
 
-    {{$commonset}}
+    {commonset}
 
-    We need to draft a daily plan for {{$firstname}} in broad-strokes (with the time of the day. e.g., have a lunch at 12:00 pm, watch TV from 7 to 8 pm). The plan must be formatted as a single JSON array of objects, each object containing the following fields:
+    We need to draft a daily plan for {firstname} in broad-strokes (with the time of the day. e.g., have a lunch at 12:00 pm, watch TV from 7 to 8 pm). The plan must be formatted as a single JSON array of objects, each object containing the following fields:
     
     * start: start time with am/pm
     * end: end time with am/pm
-    * activity: the activity {{$firstname}} is performing, in plain text
+    * activity: the activity {firstname} is performing, in plain text
 
-    The entries must be in the correct order and must not intersect. The plan starts with waking up at {{$wake_up_hour}} and completing the morning routine, and it ends with going to sleep. What would be other items in the {{$firstname}}'s daily plan?
+    The entries must be in the correct order and must not intersect. The plan starts with waking up at {wake_up_hour} and completing the morning routine, and it ends with going to sleep. What would be other items in the {firstname}'s daily plan?
   """
 
   def prepare_context(self, persona, wake_up_hour):
@@ -64,7 +65,7 @@ class run_gpt_prompt_daily_plan(InferenceStrategySK):
       # accommodating a schedule that doesn't strictly follow chronological order across days.
       is_past_midnight = time < wake_up_time and prev_time > wake_up_time
       if prev_time and time < prev_time and not is_past_midnight:
-        raise ValueError(f'Tasks are not in chronological order. "{prev_task}" intersects with "{item["activity"]}"')
+        return f'Tasks are not in chronological order. "{prev_task}" intersects with "{item["activity"]}"'
       prev_time = string_to_time(item["end"])
       prev_task = item["activity"]
 
