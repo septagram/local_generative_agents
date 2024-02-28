@@ -32,10 +32,10 @@ class run_gpt_prompt_act_obj_desc(InferenceStrategy):
       if field not in json:
         return f"Missing field: {field}"
     # Check if the "object" field matches the lowercased object_name property
-    if json["object"].lower() != self.context_variables['object_name'].lower():
+    if json["object"].lower() != self.context['object_name'].lower():
       return "Object name mismatch"
     # Check if the "object" field matches the lowercased object_name property
-    if json["user"] != self.context_variables['firstname']:
+    if json["user"] != self.context['firstname']:
       return "Object name mismatch"
   
   def extract_json(self, json: JSONType) -> str:

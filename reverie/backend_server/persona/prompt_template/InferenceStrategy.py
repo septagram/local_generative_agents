@@ -153,6 +153,7 @@ class InferenceStrategy:
   output_type: OutputType = OutputType.Text
   prompt: Optional[str] = None
   config: Dict[str, Any] = {}
+  context: Dict[str, Any] = {}
 
   def __init__(self):
     @chain
@@ -174,7 +175,10 @@ class InferenceStrategy:
           return self.fallback
       return json_output or llm_output
     
-    prepare_context = RunnableLambda(lambda args: self.prepare_context(*args))
+    @chain
+    def prepare_context(args: List):
+      self.context = self.prepare_context(*args)
+      return self.context
 
     extract = RunnableLambda(
       self.extract_json
