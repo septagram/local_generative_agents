@@ -3,25 +3,30 @@ import traceback
 import json
 
 from typing import Any, Dict, List, Union, Optional, TypeVar
-from operator import attrgetter, methodcaller
+from operator import attrgetter
 from enum import Enum, auto
-from openai import AsyncOpenAI
 from asyncio import get_event_loop
 from termcolor import colored
 from termcolor._types import Color
 from langchain_openai import ChatOpenAI
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
-from langchain_core.runnables import chain, RunnableLambda, RunnablePassthrough, RunnableParallel
+from langchain.schema import BaseMessage, AIMessage, HumanMessage
+from langchain_core.runnables import chain, Runnable, RunnableLambda
 from langchain_core.prompts import HumanMessagePromptTemplate, ChatPromptTemplate
 from langchain_core.prompt_values import ChatPromptValue
-
-from persona.prompt_template.LuminariaChatService import LuminariaChatService
+from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.exceptions import OutputParserException
+from langchain.output_parsers import RetryWithErrorOutputParser
 
 import utils as config
 
 def ColorEcho(color: Optional[Color] = None, template: str = "{value}"):
-  def invokeColorEcho(value):
-    print(colored(template.format(value=value), color), flush=True)
+  def invokeColorEcho(value: Union[ChatPromptValue, BaseMessage, str]):
+    displayValue = value
+    if isinstance(displayValue, ChatPromptValue):
+      displayValue = displayValue.messages[-1]
+    if isinstance(displayValue, BaseMessage):
+      displayValue = displayValue.content
+    print(colored(template.format(value=displayValue), color), flush=True)
     return value
   return RunnableLambda(invokeColorEcho)
 
@@ -77,6 +82,13 @@ def wrap_prompt(prompt: str):
     ]
   )
 
+def prepend_prompt(messages: List[BaseMessage]):
+  return RunnableLambda(lambda prompt: ChatPromptValue(messages=messages + prompt.messages))
+
+add_system_prompt = prepend_prompt([
+  AIMessage(content=config.system_prompt)
+])
+
 @chain
 def add_system_prompt(prompt):
   system_prompt = AIMessage(content=config.system_prompt)
@@ -101,7 +113,7 @@ def inline_semantic_function(function_name: str, prompt_config: Dict[str, Any], 
   chain = (
     announcer("LEGACY_" + function_name) |
     wrap_prompt("{prompt}") |
-    ColorEcho('light_blue', '{value.messages[0].content}') |
+    ColorEcho('light_blue') |
     add_system_prompt |
     model |
     RunnableLambda(attrgetter('content')) |
@@ -138,6 +150,34 @@ def find_and_parse_json(message: AIMessage) -> JSONType:
 ArgsType = TypeVar('ArgsType')  # The type of the arguments
 ReturnType = TypeVar('ReturnType')  # The type of the return value
 
+def with_retries(retries: int, inference_chain: Runnable, output_parser_chain: Runnable):
+  # retry_chain = 
+  retry_prompt = """
+      This reply has the following issue:
+
+      {error}
+
+      Let's correct our reply.
+  """
+
+  @chain
+  def chain_with_retries(prompt: ChatPromptValue):
+    current_prompt = prompt
+
+    for _ in range(retries + 1):
+      output = inference_chain.invoke(current_prompt)
+      try:
+        return output_parser_chain.invoke(output)
+      except Exception as error:
+        current_prompt = ChatPromptValue(
+          messages = prompt.messages + [
+            output,
+            HumanMessage(content=retry_prompt.format(error=error))
+          ]
+        )
+    raise OutputParserException("Out of retries")
+  return chain_with_retries
+
 def functor(cls):
   instance = cls()
   def infer(*args: ArgsType) -> ReturnType:
@@ -157,6 +197,32 @@ class InferenceStrategy:
 
   def __init__(self):
     @chain
+    def prepare_context(args: List):
+      self.context = self.prepare_context(*args)
+      return self.context
+
+    self.chain = (
+      announcer(self.__class__.__name__) |
+      prepare_context |
+      wrap_prompt(self.prompt) |
+      with_retries(
+        retries=self.retries,
+        inference_chain=(
+          ColorEcho('light_blue') | #, '{value.messages[-1].content}') |
+          add_system_prompt |
+          model(ModelAlias.strong, self.config) |
+          ColorEcho('cyan') #, "{value.content}")
+        ),
+        output_parser_chain=self.output_parser(),
+      ) |
+      ColorEcho('light_green', "Final output: {value}")
+    )
+
+  def prepare_context(self, *args: ArgsType) -> Dict[str, str]:
+    return {}
+  
+  def output_parser(self) -> BaseOutputParser:
+    @chain
     def validate(llm_output: str) -> Union[JSONType, str]:
       if self.output_type == OutputType.JSON:
         json_output = find_and_parse_json(llm_output)
@@ -174,11 +240,6 @@ class InferenceStrategy:
         else:
           return self.fallback
       return json_output or llm_output
-    
-    @chain
-    def prepare_context(args: List):
-      self.context = self.prepare_context(*args)
-      return self.context
 
     extract = RunnableLambda(
       self.extract_json
@@ -186,21 +247,7 @@ class InferenceStrategy:
       else self.extract_text
     )
 
-    self.chain = (
-      announcer(self.__class__.__name__) |
-      prepare_context |
-      wrap_prompt(self.prompt) |
-      ColorEcho('light_blue', '{value.messages[0].content}') |
-      add_system_prompt |
-      model(ModelAlias.strong, self.config) |
-      ColorEcho('cyan', "{value.content}") |
-      validate |
-      extract |
-      ColorEcho('light_green', "Final output: {value}")
-    )
-
-  def prepare_context(self, *args: ArgsType) -> Dict[str, str]:
-    return {}
+    return validate | extract
   
   def validate_text(self, output: str) -> Optional[str]:
     return None
