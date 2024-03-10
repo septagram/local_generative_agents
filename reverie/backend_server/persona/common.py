@@ -12,14 +12,18 @@ class HourlyScheduleItem:
   def __repr__(self):
     return f"HourlyScheduleItem(task={self.task}, start_time={self.start_time}, duration={self.duration})"
 
-def is_valid_time(time_string, require_am_pm=True):
+def is_valid_time(time_string: str, require_am_pm=True):
   regexp_ampm = r"^\s*[012]?\d:\d\d\b\s+[ap]m$"
   regexp_24 = r"^\s*[012]?\d:\d\d$"
-  return bool(re.match(regexp_ampm if require_am_pm else regexp_24, time_string))
+  return bool(re.match(regexp_ampm if require_am_pm else regexp_24, time_string, re.IGNORECASE))
 
-def string_to_time(time_string, require_am_pm=True):
+def string_to_time(time_string: str, require_am_pm=True) -> datetime.datetime:
   time_format = "%I:%M %p" if require_am_pm else "%H:%M"
-  return datetime.datetime.strptime(time_string, time_format)
+  return datetime.datetime.strptime(time_string.strip().lower(), time_format)
+
+def time_to_string(time: datetime.datetime, include_am_pm=True) -> str:
+  time_format = "%I:%M %p" if include_am_pm else "%H:%M"
+  return time.strftime(time_format).lower()
 
 def with_transformation_suffix(keys: List[str], suffix: str, transformer: lambda value: Any):
   def curried_transformer(dict: Dict[str, Any]) -> Dict[str, Any]:
@@ -34,3 +38,15 @@ def with_transformation_suffix(keys: List[str], suffix: str, transformer: lambda
 
 def with_json(keys: List[str]):
   return with_transformation_suffix(keys, '_json', json.dumps)
+
+if __name__ == "__main__":
+  # Example usage of the functions defined in this file
+  for time_string in ["10:00 PM", "9:30 am"]:
+    if is_valid_time(time_string):
+      print(f"The time '{time_string}' is valid.")
+      converted_time = string_to_time(time_string)
+      print(f"Converted time: {converted_time}")
+      back_to_string = time_to_string(converted_time)
+      print(f"Back to string: {back_to_string}")
+    else:
+      print(f"The time '{time_string}' is not valid.")

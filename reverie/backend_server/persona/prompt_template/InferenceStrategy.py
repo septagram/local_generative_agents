@@ -13,19 +13,19 @@ from langchain.schema import BaseMessage, AIMessage, HumanMessage
 from langchain_core.runnables import chain, Runnable, RunnableLambda
 from langchain_core.prompts import HumanMessagePromptTemplate, ChatPromptTemplate
 from langchain_core.prompt_values import ChatPromptValue
-from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.output_parsers import BaseOutputParser, PydanticOutputParser
 from langchain_core.exceptions import OutputParserException
-from langchain.output_parsers import RetryWithErrorOutputParser
 
 import utils as config
 
-def ColorEcho(color: Optional[Color] = None, template: str = "{value}"):
+def ColorEcho(color: Optional[Color] = None, template: str = "{value}", full_prompt: bool = False):
   def invokeColorEcho(value: Union[ChatPromptValue, BaseMessage, str]):
     displayValue = value
-    if isinstance(displayValue, ChatPromptValue):
-      displayValue = displayValue.messages[-1]
-    if isinstance(displayValue, BaseMessage):
-      displayValue = displayValue.content
+    if not full_prompt:
+      if isinstance(displayValue, ChatPromptValue):
+        displayValue = displayValue.messages[-1]
+      if isinstance(displayValue, BaseMessage):
+        displayValue = displayValue.content
     print(colored(template.format(value=displayValue), color), flush=True)
     return value
   return RunnableLambda(invokeColorEcho)
@@ -112,7 +112,7 @@ def inline_semantic_function(function_name: str, prompt_config: Dict[str, Any], 
   )
   chain = (
     announcer("LEGACY_" + function_name) |
-    wrap_prompt("{prompt}") |
+    wrap_prompt(prompt) |
     ColorEcho('light_blue') |
     add_system_prompt |
     model |
@@ -169,11 +169,13 @@ def with_retries(retries: int, inference_chain: Runnable, output_parser_chain: R
       try:
         return output_parser_chain.invoke(output)
       except Exception as error:
+
         current_prompt = ChatPromptValue(
-          messages = prompt.messages + [
-            output,
-            HumanMessage(content=retry_prompt.format(error=error))
-          ]
+          messages = (
+            (current_prompt.messages if config.do_retry_with_full_history else prompt.messages) +
+            [output] +
+            wrap_prompt(retry_prompt).format_messages(error=error)
+          )
         )
     raise OutputParserException("Out of retries")
   return chain_with_retries
@@ -190,15 +192,19 @@ class OutputType(Enum):
 
 class InferenceStrategy:
   retries: int = 5
-  output_type: OutputType = OutputType.Text
+  output_type: Union[type, OutputType] = OutputType.Text
   prompt: Optional[str] = None
   config: Dict[str, Any] = {}
   context: Dict[str, Any] = {}
 
   def __init__(self):
+    output_parser = self.output_parser()
+
     @chain
     def prepare_context(args: List):
       self.context = self.prepare_context(*args)
+      if isinstance(output_parser, BaseOutputParser):
+        self.context['format_instructions'] = output_parser.get_format_instructions()
       return self.context
 
     self.chain = (
@@ -208,12 +214,12 @@ class InferenceStrategy:
       with_retries(
         retries=self.retries,
         inference_chain=(
-          ColorEcho('light_blue') | #, '{value.messages[-1].content}') |
+          ColorEcho('light_blue') |
           add_system_prompt |
           model(ModelAlias.strong, self.config) |
-          ColorEcho('cyan') #, "{value.content}")
+          ColorEcho('cyan')
         ),
-        output_parser_chain=self.output_parser(),
+        output_parser_chain=output_parser,
       ) |
       ColorEcho('light_green', "Final output: {value}")
     )
@@ -222,32 +228,35 @@ class InferenceStrategy:
     return {}
   
   def output_parser(self) -> BaseOutputParser:
-    @chain
-    def validate(llm_output: str) -> Union[JSONType, str]:
-      if self.output_type == OutputType.JSON:
-        json_output = find_and_parse_json(llm_output)
-        validation_error = self.validate_json(json_output)
-      elif self.output_type == OutputType.Text:
-        validation_error = self.validate_text(llm_output)
-      else:
-        raise ValueError(f"Unknown output type: {self.output_type}")
-      if validation_error is not None:
-        print(colored(f"Error in interaction with {self.__class__.__name__}: {str(validation_error)}", 'red'))
-        if '__traceback__' in validation_error:
-          traceback.print_exception(type(validation_error), validation_error, validation_error.__traceback__)
-        if config.strict_errors:
-          raise ValueError(validation_error)
+    if self.output_type in OutputType:
+      @chain
+      def validate(llm_output: str) -> Union[JSONType, str]:
+        if self.output_type == OutputType.JSON:
+          json_output = find_and_parse_json(llm_output)
+          validation_error = self.validate_json(json_output)
+        elif self.output_type == OutputType.Text:
+          validation_error = self.validate_text(llm_output)
         else:
-          return self.fallback
-      return json_output or llm_output
+          raise ValueError(f"Unknown output type: {self.output_type}")
+        if validation_error is not None:
+          print(colored(f"Error in interaction with {self.__class__.__name__}: {str(validation_error)}", 'red'))
+          if '__traceback__' in validation_error:
+            traceback.print_exception(type(validation_error), validation_error, validation_error.__traceback__)
+          if config.strict_errors:
+            raise ValueError(validation_error)
+          else:
+            return self.fallback
+        return json_output or llm_output
 
-    extract = RunnableLambda(
-      self.extract_json
-      if self.output_type == OutputType.JSON
-      else self.extract_text
-    )
+      extract = RunnableLambda(
+        self.extract_json
+        if self.output_type == OutputType.JSON
+        else self.extract_text
+      )
 
-    return validate | extract
+      return validate | extract
+    else:
+      return PydanticOutputParser(self.output_type)
   
   def validate_text(self, output: str) -> Optional[str]:
     return None
