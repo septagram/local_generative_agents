@@ -5,13 +5,43 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Start Backend",
+            "name": "Python: Attach",
+            "type": "python",
+            "request": "attach",
+            "connect": {
+                "host": "localhost",
+                "port": 5678
+            },
+            "pathMappings": [
+                {
+                    "localRoot": "${workspaceFolder}",
+                    "remoteRoot": "."
+                }
+            ]
+        },
+        {
+            "name": "Start Backend (integrated)",
             "type": "python",
             "request": "launch",
             "program": "reverie.py",
             "console": "integratedTerminal",
+            // "console": "externalTerminal",
+            // "python": "c:/Users/septa/Documents/Code/generative_agents/ai-town-env/Scripts/python.exe",
+            // "preLaunchTask": "Activate Python Environment",
             "cwd": "${workspaceFolder}/reverie/backend_server",
-            "justMyCode": false
+            "justMyCode": true
+        },
+        {
+            "name": "Start Backend (external)",
+            "type": "python",
+            "request": "launch",
+            "program": "reverie.py",
+            // "console": "integratedTerminal",
+            "console": "externalTerminal",
+            "python": "c:/Users/septa/Documents/Code/generative_agents/ai-town-env/Scripts/python.exe",
+            "preLaunchTask": "Activate Python Environment",
+            "cwd": "${workspaceFolder}/reverie/backend_server",
+            "justMyCode": true
         },
         {
             "name": "Python: Current File",
@@ -20,7 +50,7 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "cwd": "${workspaceFolder}/reverie/backend_server",
-            "justMyCode": false
+            "justMyCode": true
         }
     ]
 }

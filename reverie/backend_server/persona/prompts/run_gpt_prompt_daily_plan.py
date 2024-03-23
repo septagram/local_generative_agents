@@ -1,6 +1,6 @@
 from typing import List
 from random import Random
-from datetime import datetime
+from datetime import time
 from langchain_core.output_parsers import PydanticOutputParser
 from langchain_core.pydantic_v1 import BaseModel, Field, validator, conlist
 
@@ -8,8 +8,8 @@ from persona.common import is_valid_time, string_to_time, time_to_string
 from persona.prompt_template.InferenceStrategy import functor, InferenceStrategy
 
 class DailyPlanItem(BaseModel):
-  start: datetime = Field(description="start time with am/pm")
-  end: datetime = Field(description="end time with am/pm")
+  start: time = Field(description="start time with am/pm")
+  end: time = Field(description="end time with am/pm")
   activity: str = Field(description=f"the activity persona is performing, in plain text")
 
   @classmethod
@@ -17,12 +17,12 @@ class DailyPlanItem(BaseModel):
     if not is_valid_time(value):
       raise ValueError(f'Invalid {field_name} time format: "{value}". Example time format: "6:00 am".')
 
-  @validator('start')
+  @validator('start', pre=True)
   def parse_start(cls, time_string: str):
     cls.validate_time(time_string)
     return string_to_time(time_string)
 
-  @validator('end')
+  @validator('end', pre=True)
   def parse_end(cls, time_string: str):
     cls.validate_time(time_string)
     return string_to_time(time_string)
@@ -94,7 +94,7 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
   OUTPUT: 
     a list of daily actions in broad strokes.
   """
-  
+
   output_type = DailyPlanResponse
   config = {
     "max_tokens": 1000,
@@ -118,11 +118,8 @@ class run_gpt_prompt_daily_plan(InferenceStrategy):
       "commonset": persona.scratch.get_str_iss(),
       "date": persona.scratch.get_str_curr_date_str(),
       "firstname": persona.scratch.get_str_firstname(),
-      "wake_up_hour": datetime(1, 1, 1, hour=int(wake_up_hour), minute=int((wake_up_hour % 1) * 60), second=0, microsecond=0).strftime("%I:%M %p")
+      "wake_up_hour": time(hour=int(wake_up_hour), minute=int((wake_up_hour % 1) * 60), second=0, microsecond=0).strftime("%I:%M %p")
     }
-
-  def output_parser(self):
-    return PydanticOutputParser(pydantic_object=DailyPlanResponse)
 
   def postprocess(self, result: DailyPlanResponse):
     return [f"{time_to_string(item.start)} - {item.activity}" for item in result.activities]

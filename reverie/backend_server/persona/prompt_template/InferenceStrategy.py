@@ -1,6 +1,5 @@
 import re
 import traceback
-import json
 
 from typing import Any, Dict, List, Union, Optional, TypeVar
 from operator import attrgetter
@@ -13,10 +12,11 @@ from langchain.schema import BaseMessage, AIMessage, HumanMessage
 from langchain_core.runnables import chain, Runnable, RunnableLambda
 from langchain_core.prompts import HumanMessagePromptTemplate, ChatPromptTemplate
 from langchain_core.prompt_values import ChatPromptValue
-from langchain_core.output_parsers import BaseOutputParser, PydanticOutputParser
+from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.exceptions import OutputParserException
 
 import utils as config
+from persona.prompt_template.SimplifiedPedanticOutputParser import SimplifiedPydanticOutputParser, JSONType, find_and_parse_json
 
 def ColorEcho(color: Optional[Color] = None, template: str = "{value}", full_prompt: bool = False):
   def invokeColorEcho(value: Union[ChatPromptValue, BaseMessage, str]):
@@ -112,7 +112,7 @@ def inline_semantic_function(function_name: str, prompt_config: Dict[str, Any], 
   )
   chain = (
     announcer("LEGACY_" + function_name) |
-    wrap_prompt(prompt) |
+    wrap_prompt(prompt.replace("{", "{{").replace("}", "}}")) |
     ColorEcho('light_blue') |
     add_system_prompt |
     model |
@@ -120,31 +120,6 @@ def inline_semantic_function(function_name: str, prompt_config: Dict[str, Any], 
     ColorEcho('cyan')
   )
   return lambda: chain.invoke({"prompt": prompt})
-  
-JSONType = Union[Dict[str, Any], List[Any]]
-
-def find_and_parse_json(message: AIMessage) -> JSONType:
-  text = message.content
-  OpeningToClosingBrace = {"{": "}", "[": "]"}
-  start_indices = [text.find('{'), text.find('[')]
-  start_index = min(i for i in start_indices if i != -1)
-
-  if start_index == -1:
-    return None
-  
-  closing_brace = OpeningToClosingBrace[text[start_index]]
-  text = text[start_index:]
-  last_error = ValueError("Expected JSON object/array")
-
-  while True:
-    end_index = text.rfind(closing_brace)
-    if end_index == -1:
-      raise last_error
-    try:
-      return json.loads(text[:end_index+1])
-    except json.JSONDecodeError as e:
-      last_error = e
-      text = text[:end_index]
 
 # Define type variables
 ArgsType = TypeVar('ArgsType')  # The type of the arguments
@@ -199,12 +174,17 @@ class InferenceStrategy:
 
   def __init__(self):
     output_parser = self.output_parser()
+    format_instructions = (
+      output_parser.get_format_instructions()
+      if callable(getattr(output_parser, 'get_format_instructions', None))
+      else None
+    )
 
     @chain
     def prepare_context(args: List):
       self.context = self.prepare_context(*args)
-      if isinstance(output_parser, BaseOutputParser):
-        self.context['format_instructions'] = output_parser.get_format_instructions()
+      if format_instructions:
+        self.context['format_instructions'] = format_instructions
       return self.context
 
     self.chain = (
@@ -221,6 +201,7 @@ class InferenceStrategy:
         ),
         output_parser_chain=output_parser,
       ) |
+      RunnableLambda(lambda result: self.postprocess(result)) |
       ColorEcho('light_green', "Final output: {value}")
     )
 
@@ -228,11 +209,11 @@ class InferenceStrategy:
     return {}
   
   def output_parser(self) -> BaseOutputParser:
-    if self.output_type in OutputType:
+    if isinstance(self.output_type, OutputType):
       @chain
       def validate(llm_output: str) -> Union[JSONType, str]:
         if self.output_type == OutputType.JSON:
-          json_output = find_and_parse_json(llm_output)
+          json_output = find_and_parse_json(llm_output.content)
           validation_error = self.validate_json(json_output)
         elif self.output_type == OutputType.Text:
           validation_error = self.validate_text(llm_output)
@@ -256,7 +237,7 @@ class InferenceStrategy:
 
       return validate | extract
     else:
-      return PydanticOutputParser(self.output_type)
+      return SimplifiedPydanticOutputParser(pydantic_object=self.output_type)
   
   def validate_text(self, output: str) -> Optional[str]:
     return None
@@ -269,6 +250,9 @@ class InferenceStrategy:
   
   def extract_json(self, json: JSONType) -> ReturnType:
     return json
+  
+  def postprocess(self, result: Any):
+    return result
   
   def fallback(self, *args: ArgsType) -> ReturnType:
     raise ValueError("LLM output didn't pass validation with no fallback function defined.")

@@ -17,11 +17,11 @@ def is_valid_time(time_string: str, require_am_pm=True):
   regexp_24 = r"^\s*[012]?\d:\d\d$"
   return bool(re.match(regexp_ampm if require_am_pm else regexp_24, time_string, re.IGNORECASE))
 
-def string_to_time(time_string: str, require_am_pm=True) -> datetime.datetime:
+def string_to_time(time_string: str, require_am_pm=True) -> datetime.time:
   time_format = "%I:%M %p" if require_am_pm else "%H:%M"
-  return datetime.datetime.strptime(time_string.strip().lower(), time_format)
+  return datetime.datetime.strptime(time_string.strip().upper(), time_format).time()
 
-def time_to_string(time: datetime.datetime, include_am_pm=True) -> str:
+def time_to_string(time: datetime.time, include_am_pm=True) -> str:
   time_format = "%I:%M %p" if include_am_pm else "%H:%M"
   return time.strftime(time_format).lower()
 
