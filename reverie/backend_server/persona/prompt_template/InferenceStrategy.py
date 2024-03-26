@@ -232,10 +232,12 @@ class InferenceStrategy:
           model(ModelAlias.strong, self.config) |
           ColorEcho('cyan')
         ),
-        output_parser_chain=output_parser,
-      ) |
-      RunnableLambda(lambda result: self.postprocess(result)) |
-      ColorEcho('light_green', "Final output: {value}")
+        output_parser_chain=(
+          output_parser |
+          RunnableLambda(lambda result: self.postprocess(result)) |
+          ColorEcho('light_green', "Final output: {value}")
+        ),
+      )
     )
 
   def prepare_context(self, *args: ArgsType) -> Dict[str, str]:
