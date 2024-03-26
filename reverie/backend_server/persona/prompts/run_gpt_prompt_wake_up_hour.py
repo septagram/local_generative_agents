@@ -1,10 +1,10 @@
 import re
 
 from persona.common import is_valid_time
-from persona.prompt_template.InferenceStrategySK import JSONType, OutputType, functor, InferenceStrategySK
+from persona.prompt_template.InferenceStrategy import JSONType, OutputType, functor, InferenceStrategy
 
 @functor
-class run_gpt_prompt_wake_up_hour(InferenceStrategySK):
+class run_gpt_prompt_wake_up_hour(InferenceStrategy):
   output_type = OutputType.JSON
   config = {
     "max_tokens": 15,
@@ -12,14 +12,14 @@ class run_gpt_prompt_wake_up_hour(InferenceStrategySK):
     "top_p": 0.8,
   }
   prompt = """
-    {{$iss}}
+    {iss}
 
-    What will be the {{$lifestyle}} {{$firstname}}'s wake up time today?
+    What will be the {lifestyle} {firstname}'s wake up time today?
 
-    Provide the answer in a JSON format with only the actual time, without any reasoning or deliberation. Format the time in a 24-hour format like "H:mm" (H for hours, mm for minutes) and include it as the value for the "time" key in the JSON object. Do not include am/pm or any other information aside from the actual time. The answer should be in the following format: {"time": "H:mm"}.
+    Provide the answer in a JSON format with only the actual time, without any reasoning or deliberation. Format the time in a 24-hour format like "H:mm" (H for hours, mm for minutes) and include it as the value for the "time" key in the JSON object. Do not include am/pm or any other information aside from the actual time. The answer should be in the following format: {{"time": "H:mm"}}.
 
     Example: 
-    If the wake up time is 6:00 AM, the answer should be: {"time": "6:00"}
+    If the wake up time is 6:00 AM, the answer should be: {{"time": "6:00"}}
   """
   def prepare_context(self, persona):
     return {
