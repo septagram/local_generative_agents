@@ -9,14 +9,19 @@ from termcolor import colored
 from termcolor._types import Color
 from langchain_openai import ChatOpenAI
 from langchain.schema import BaseMessage, AIMessage, HumanMessage
+from langchain.prompts.example_selector import SemanticSimilarityExampleSelector
 from langchain_core.runnables import chain, Runnable, RunnableLambda
 from langchain_core.prompts import HumanMessagePromptTemplate, ChatPromptTemplate
 from langchain_core.prompt_values import ChatPromptValue
 from langchain_core.output_parsers import BaseOutputParser
+from langchain_core.example_selectors.base import BaseExampleSelector
 from langchain_core.exceptions import OutputParserException
+from langchain_community.vectorstores import Chroma
 
 import utils as config
 from persona.prompt_template.SimplifiedPedanticOutputParser import SimplifiedPydanticOutputParser, JSONType, find_and_parse_json
+from persona.prompt_template.embedding import LocalEmbeddings
+from persona.common import deindent
 
 def ColorEcho(color: Optional[Color] = None, template: str = "{value}", full_prompt: bool = False):
   def invokeColorEcho(value: Union[ChatPromptValue, BaseMessage, str]):
@@ -67,18 +72,9 @@ def announcer(name):
   return RunnableLambda(announce)
 
 def wrap_prompt(prompt: str):
-  # Deindent by removing the first sequence of spaces or tabs starting with \n
-  # and removing all its instances
-  match = re.search(r'\n[ \t]+', prompt)
-  if match:
-    first_indentation = match.group()
-  else:
-    first_indentation = '\n'
-  deindented_prompt = prompt.strip().replace(first_indentation, '\n')
-
   return ChatPromptTemplate(
     messages=[
-      HumanMessagePromptTemplate.from_template(deindented_prompt)
+      HumanMessagePromptTemplate.from_template(deindent(prompt))
     ]
   )
 
@@ -155,6 +151,12 @@ def with_retries(retries: int, inference_chain: Runnable, output_parser_chain: R
     raise OutputParserException("Out of retries")
   return chain_with_retries
 
+class NoExampleSelector(BaseExampleSelector):
+    def add_example(self, example: Dict[str, str]) -> Any:
+      pass
+    def select_examples(self, input_variables: Dict[str, str]) -> List[dict]:
+      return []
+
 def functor(cls):
   instance = cls()
   def infer(*args: ArgsType) -> ReturnType:
@@ -169,8 +171,12 @@ class InferenceStrategy:
   retries: int = 5
   output_type: Union[type, OutputType] = OutputType.Text
   prompt: Optional[str] = None
+  example_prompt: Optional[str] = ""
   config: Dict[str, Any] = {}
   context: Dict[str, Any] = {}
+  examples: List[Dict[str, Any]] = []
+  example_count: int = 3
+  example_selector: BaseExampleSelector = NoExampleSelector()
 
   def __init__(self):
     output_parser = self.output_parser()
@@ -187,9 +193,36 @@ class InferenceStrategy:
         self.context['format_instructions'] = format_instructions
       return self.context
 
+    if self.examples:
+      self.example_selector = SemanticSimilarityExampleSelector.from_examples(
+        [
+          {
+            "input": deindent(self.example_prompt).format(**example),
+            "output": example['output'],
+          }
+          for example in self.examples
+        ],
+        LocalEmbeddings(),
+        Chroma,
+        k=self.example_count,
+      )
+
+    @chain
+    def fetch_examples(context: Dict[str, Any]):
+      if self.example_selector:
+        search_object = {"input": deindent(self.example_prompt).format(**context)}
+        selected_examples = self.example_selector.select_examples(search_object)
+        context["examples"] = '\n\n'.join([
+          ('{input}\nAnswer: {output}').format(**example)
+          for example in selected_examples
+        ])
+        context["example_prompt"] = deindent(self.example_prompt).format(**context)
+      return context
+
     self.chain = (
       announcer(self.__class__.__name__) |
       prepare_context |
+      fetch_examples |
       wrap_prompt(self.prompt) |
       with_retries(
         retries=self.retries,

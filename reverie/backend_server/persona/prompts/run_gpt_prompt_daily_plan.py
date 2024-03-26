@@ -39,7 +39,7 @@ class DailyPlanResponse(BaseModel):
     ensuring there are no overlapping activities. The first activity's start time is considered
     the wake-up time for the persona.
 
-    Args:
+    Args: 
       activities: A list of DailyPlanItem objects representing the planned activities.
 
     Returns:

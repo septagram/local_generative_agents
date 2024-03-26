@@ -321,15 +321,6 @@ def safe_generate_response(prompt,
       print ("~~~~")
   return fail_safe_response
 
-
-def get_openai_embedding(text, model=embedding_model):
-  text = text.replace("\n", " ")
-  if not text: 
-    text = "this is blank"
-  return openai.Embedding.create(
-          input=[text], model=model)['data'][0]['embedding']
-
-
 if __name__ == '__main__':
   gpt_parameter = {"engine": "text-davinci-003", "max_tokens": 50, 
                    "temperature": 0, "top_p": 1, "stream": False,

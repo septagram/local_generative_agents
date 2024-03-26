@@ -39,6 +39,16 @@ def with_transformation_suffix(keys: List[str], suffix: str, transformer: lambda
 def with_json(keys: List[str]):
   return with_transformation_suffix(keys, '_json', json.dumps)
 
+def deindent(text: str) -> str:
+  # Deindent by removing the first sequence of spaces or tabs starting with \n
+  # and removing all its instances
+  match = re.search(r'\n[ \t]+', text)
+  if match:
+    first_indentation = match.group()
+  else:
+    first_indentation = '\n'
+  return text.strip().replace(first_indentation, '\n')
+
 if __name__ == "__main__":
   # Example usage of the functions defined in this file
   for time_string in ["10:00 PM", "9:30 am"]:
