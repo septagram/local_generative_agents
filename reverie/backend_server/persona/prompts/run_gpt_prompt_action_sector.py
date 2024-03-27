@@ -1,6 +1,6 @@
-from langchain_core.pydantic_v1 import BaseModel, Field, validator, conlist
+from langchain_core.pydantic_v1 import BaseModel, Field
 
-from persona.prompt_template.InferenceStrategy import JSONType, OutputType, functor, InferenceStrategy
+from persona.prompt_template.InferenceStrategy import functor, InferenceStrategy
 from persona.common import with_json
 
 class ActionSectorResponse(BaseModel):
