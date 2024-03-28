@@ -23,7 +23,6 @@ ray==2.8.1
 s3transfer==0.6.0
 scikit-posthocs==0.7.0
 selenium==4.8.2
-semantic-kernel==0.4.3.dev0
 sentencepiece==0.1.99
 sklearn==0.0
 termcolor==2.4.0
