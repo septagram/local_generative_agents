@@ -1,3 +1,4 @@
+import os
 import re
 import traceback
 
@@ -17,11 +18,18 @@ from langchain_core.output_parsers import BaseOutputParser
 from langchain_core.example_selectors.base import BaseExampleSelector
 from langchain_core.exceptions import OutputParserException
 from langchain_community.vectorstores import Chroma
+from langchain.globals import set_llm_cache
+from langchain.cache import SQLiteCache
 
 import utils as config
 from persona.prompt_template.SimplifiedPedanticOutputParser import SimplifiedPydanticOutputParser, JSONType, find_and_parse_json
 from persona.prompt_template.embedding import LocalEmbeddings
 from persona.common import deindent
+
+if config.debug_cache_clear and os.path.exists(".langchain.db"):
+  os.remove(".langchain.db")
+if config.debug_cache_enabled:
+  set_llm_cache(SQLiteCache(database_path=".langchain.db"))
 
 def ColorEcho(color: Optional[Color] = None, template: str = "{value}", full_prompt: bool = False):
   def invokeColorEcho(value: Union[ChatPromptValue, BaseMessage, str]):
