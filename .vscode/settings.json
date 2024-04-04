@@ -2,5 +2,6 @@
     "editor.wordWrap": "on",
     "editor.tabSize": 2,
     "editor.insertSpaces": true,
-    "editor.detectIndentation": true
+    "editor.detectIndentation": true,
+    "copyrightInserter.holder": "Joon Sung Park, Igor Novikov"
 }

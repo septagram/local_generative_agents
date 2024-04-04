@@ -1,8 +1,28 @@
-# Generative Agents: Interactive Simulacra of Human Behavior 
+# (Local) Generative Agents: Interactive Simulacra of Human Behavior (WIP)
 
 <p align="center" width="100%">
 <img src="cover.png" alt="Smallville" style="width: 80%; min-width: 300px; display: block; margin: auto;">
 </p>
+
+## Fork Purpose and Progress
+
+This repository is a fork of the original [Generative Agents: Interactive Simulacra of Human Behavior](https://github.com/joonspk-research/generative_agents) project. The primary goal of this fork is to adapt the generative agents to run on local models, transitioning from GPT-3 to the more modern chat-based models like Mistral Instruct in the process. This change was motivated by the need outlined in [Issue #1](https://github.com/joonspk-research/generative_agents/issues/1) of the original repository.
+
+### Transition to Local Models
+The transition to local models requires a comprehensive overhaul of both prompt generation and output processing mechanisms. The original framework was designed with GPT-3, a completion model, in mind. However, the latest open-source models adopt a chat model paradigm, necessitating a fundamental rework of virtually every prompt, alongside their corresponding validation and data extraction logic.
+
+### Migration to [LangChain](https://github.com/microsoft/langchain)
+Given the extensive changes required, the codebase is being migrated to LangChain to leverage its flexibility in prompt crafting, output processing, and implementing complex inference flows. (In addition, for me personally, this is primarily a learning project.)
+
+### Implementation of Reflection and Output Formatting Instruction Generation
+Reflection capabilities have been introduced, enhancing the system's resilience and reducing the dependency on flawless prompt engineering. Errors are corrected based on enhanced output validation, which now pinpoints very specific errors for the LLM to address. Building upon LangChain's PydanticOutputParser, both format instructions and reflection error generation have been improved, with instructions being crafted in a way that is more straightforward and intelligible for smaller models.
+
+### Current Status
+It's important to note that this project is a work in progress and has not yet achieved full functionality of the original system. The extensive changes in prompting and output parsing require a comprehensive refactor of possibly every single LLM prompt and its respective output processing in the existing codebase. As such, the project is not currently in a state where it operates end-to-end as expected.
+
+Original README below.
+
+## Generative Agents: Interactive Simulacra of Human Behavior
 
 This repository accompanies our research paper titled "[Generative Agents: Interactive Simulacra of Human Behavior](https://arxiv.org/abs/2304.03442)." It contains our core simulation module for  generative agents—computational agents that simulate believable human behaviors—and their game environment. Below, we document the steps for setting up the simulation environment on your local machine and for replaying the simulation as a demo animation.
 
