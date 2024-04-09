@@ -78,7 +78,7 @@ class MemoryTree:
 
   def get_array_accessible_sector_arenas(self, sector): 
     """
-    Returns a summary string of all the arenas that the persona can access 
+    Returns an array of all the arenas that the persona can access 
     within the current sector. 
 
     Note that there are places a given persona cannot enter. This information
@@ -87,9 +87,9 @@ class MemoryTree:
     INPUT
       None
     OUTPUT 
-      A summary string of all the arenas that the persona can access. 
-    EXAMPLE STR OUTPUT
-      "bedroom, kitchen, dining room, office, bathroom"
+      An array of all the arenas that the persona can access. 
+    EXAMPLE OUTPUT
+      ["bedroom", "kitchen", "dining room", "office", "bathroom"]
     """
     curr_world, curr_sector = sector.split(":")
     if not curr_sector: 
@@ -113,6 +113,31 @@ class MemoryTree:
     """
     return ", ".join(self.get_array_accessible_sector_arenas(sector))
 
+  def get_array_accessible_arena_game_objects(self, arena):
+    """
+    Returns an array of all the game objects that the persona can access 
+    within the current arena. 
+
+    This function takes into account the specific arena within a sector and world, 
+    and returns a list of game objects available in that arena. If the arena does not exist 
+    or is inaccessible, it returns an empty list. 
+
+    INPUT
+      arena: A string in the format "world:sector:arena" specifying the current location.
+    OUTPUT 
+      An array of all the game objects that the persona can access in the specified arena. 
+    EXAMPLE OUTPUT
+      ["phone", "charger", "bed", "nightstand"]
+    """
+    curr_world, curr_sector, curr_arena = arena.split(":")
+
+    if not curr_arena: 
+      return []
+
+    try: 
+      return list(self.tree[curr_world][curr_sector][curr_arena])
+    except: 
+      return list(self.tree[curr_world][curr_sector][curr_arena.lower()])
 
   def get_str_accessible_arena_game_objects(self, arena):
     """
@@ -128,17 +153,7 @@ class MemoryTree:
     EXAMPLE STR OUTPUT
       "phone, charger, bed, nightstand"
     """
-    curr_world, curr_sector, curr_arena = arena.split(":")
-
-    if not curr_arena: 
-      return ""
-
-    try: 
-      x = ", ".join(list(self.tree[curr_world][curr_sector][curr_arena]))
-    except: 
-      x = ", ".join(list(self.tree[curr_world][curr_sector][curr_arena.lower()]))
-    return x
-
+    return ", ".join(self.get_array_accessible_game_objects(arena))
 
 if __name__ == '__main__':
   x = f"../../../../environment/frontend_server/storage/the_ville_base_LinFamily/personas/Eddy Lin/bootstrap_memory/spatial_memory.json"

@@ -24,6 +24,7 @@ from persona.prompts.run_gpt_prompt_daily_plan import run_gpt_prompt_daily_plan
 from persona.prompts.run_gpt_prompt_task_decomp import run_gpt_prompt_task_decomp
 from persona.prompts.run_gpt_prompt_action_sector import run_gpt_prompt_action_sector
 from persona.prompts.run_gpt_prompt_action_arena import run_gpt_prompt_action_arena
+from persona.prompts.run_gpt_prompt_action_game_object import run_gpt_prompt_action_game_object
 from persona.prompts.run_gpt_prompt_act_obj_desc import run_gpt_prompt_act_obj_desc
 from persona.prompts.run_gpt_prompt_act_obj_event_triple import run_gpt_prompt_act_obj_event_triple
 
@@ -567,8 +568,7 @@ def _determine_action(persona, maze):
   act_sector = run_gpt_prompt_action_sector(cur_item.task, persona, maze)
   act_arena = run_gpt_prompt_action_arena(cur_item.task, persona, maze, act_world, act_sector)
   act_address = f"{act_world}:{act_sector}:{act_arena}"
-  act_game_object = generate_action_game_object(cur_item.task, act_address,
-                                                persona, maze)
+  act_game_object = run_gpt_prompt_action_game_object(cur_item.task, persona, act_address)
   new_address = f"{act_world}:{act_sector}:{act_arena}:{act_game_object}"
   act_pron = generate_action_pronunciatio(cur_item.task, persona)
   act_event = generate_action_event_triple(cur_item.task, persona)
