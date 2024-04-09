@@ -29,7 +29,7 @@ class ActionArenaResponse(ResponseModel):
   def validate_arena(cls, arena: str, values: Dict[str, Any]):
     if values['context']:
       context = values['context']
-      if arena == context['current_sector'] or arena == context['current_sector']:
+      if arena == context['current_sector'] or arena == context['target_sector']:
         raise ValueError(f"Sector name was returned instead of an Arena name. Select one of {context['target_sector_arenas_json']}")
       if not arena in context['target_sector_arenas']:
         raise ValueError(f"Specified Arena is not in the list of available Arenas. Select one of {context['target_sector_arenas_json']}")

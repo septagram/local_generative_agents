@@ -27,6 +27,7 @@ from persona.prompts.run_gpt_prompt_action_arena import run_gpt_prompt_action_ar
 from persona.prompts.run_gpt_prompt_action_game_object import run_gpt_prompt_action_game_object
 from persona.prompts.run_gpt_prompt_act_obj_desc import run_gpt_prompt_act_obj_desc
 from persona.prompts.run_gpt_prompt_act_obj_event_triple import run_gpt_prompt_act_obj_event_triple
+from persona.prompts.run_gpt_prompt_pronunciatio import run_gpt_prompt_pronunciatio
 
 ##############################################################################
 # CHAPTER 2: Generate
@@ -169,33 +170,6 @@ def generate_action_game_object(act_desp, act_address, persona, maze):
   if not persona.s_mem.get_str_accessible_arena_game_objects(act_address): 
     return "<random>"
   return run_gpt_prompt_action_game_object(act_desp, persona, maze, act_address)[0]
-
-
-def generate_action_pronunciatio(act_desp, persona): 
-  """TODO 
-  Given an action description, creates an emoji string description via a few
-  shot prompt. 
-
-  Does not really need any information from persona. 
-
-  INPUT: 
-    act_desp: the description of the action (e.g., "sleeping")
-    persona: The Persona class instance
-  OUTPUT: 
-    a string of emoji that translates action description.
-  EXAMPLE OUTPUT: 
-    "🧈🍞"
-  """
-  if debug: print ("GNS FUNCTION: <generate_action_pronunciatio>")
-  try: 
-    x = run_gpt_prompt_pronunciatio(act_desp, persona)[0]
-  except: 
-    x = "🙂"
-
-  if not x: 
-    return "🙂"
-  return x
-
 
 def generate_action_event_triple(act_desp, persona): 
   """TODO 
@@ -570,11 +544,11 @@ def _determine_action(persona, maze):
   act_address = f"{act_world}:{act_sector}:{act_arena}"
   act_game_object = run_gpt_prompt_action_game_object(cur_item.task, persona, act_address)
   new_address = f"{act_world}:{act_sector}:{act_arena}:{act_game_object}"
-  act_pron = generate_action_pronunciatio(cur_item.task, persona)
+  act_pron = run_gpt_prompt_pronunciatio(cur_item.task, persona)
   act_event = generate_action_event_triple(cur_item.task, persona)
   # Persona's actions also influence the object states. We set those up here. 
   act_obj_desp = run_gpt_prompt_act_obj_desc(act_game_object, cur_item.task, persona)
-  act_obj_pron = generate_action_pronunciatio(act_obj_desp, persona)
+  act_obj_pron = run_gpt_prompt_pronunciatio(act_obj_desp, persona)
   act_obj_event = run_gpt_prompt_act_obj_event_triple(persona, cur_item.task, act_obj_desp, act_game_object)
 
   # Adding the action to persona's queue. 
