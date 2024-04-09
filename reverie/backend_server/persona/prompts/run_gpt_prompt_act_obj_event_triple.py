@@ -14,11 +14,11 @@
  limitations under the License.
  """
 
-from langchain_core.pydantic_v1 import BaseModel, Field
+from persona.prompt_template.ResponseModel import ResponseModel, Field
 
 from persona.prompt_template.InferenceStrategy import ReturnType, functor, InferenceStrategy
 
-class ActObjEventTripleResponse(BaseModel):
+class ActObjEventTripleResponse(ResponseModel):
   object: str = Field(...)
   predicate: str = Field(...)
   interaction: str = Field(...)

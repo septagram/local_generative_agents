@@ -48,9 +48,12 @@ def find_and_parse_json(text: str) -> JSONType:
       text = text[:end_index]
 
 class SimplifiedPydanticOutputParser(PydanticOutputParser):
+  context: Dict[str, Any] = {}
+
   def parse_result(self, result: List[Generation], *, partial: bool = False) -> Any:
     json_object = find_and_parse_json(result[0].text)
     try:
+      json_object['context'] = self.context
       return self.pydantic_object.parse_obj(json_object)
     except ValidationError as errors_object:
       msg = '\n'.join(
@@ -80,6 +83,7 @@ class SimplifiedPydanticOutputParser(PydanticOutputParser):
         ','
       )
       for field_name, field_schema in object_schema['properties'].items()
+      if field_name != 'context' or indent > 0
     ]
     complete_instructions = '\n'.join(['{'] + fields_instructions + ['  ' * indent + '}'])
     return complete_instructions

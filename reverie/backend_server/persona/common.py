@@ -17,7 +17,7 @@
 import json
 import re
 import datetime
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 
 class HourlyScheduleItem:
   def __init__(self, task: str, start_time: int, duration: int = None):
@@ -40,6 +40,14 @@ def string_to_time(time_string: str, require_am_pm=True) -> datetime.time:
 def time_to_string(time: datetime.time, include_am_pm=True) -> str:
   time_format = "%I:%M %p" if include_am_pm else "%H:%M"
   return time.strftime(time_format).lower()
+
+def validate_time(field_name: str, value: Union[str, datetime.time], require_am_pm: bool = True) -> datetime.time:
+  if isinstance(value, str):
+    if not is_valid_time(value, require_am_pm):
+      raise ValueError(f'Invalid {field_name} time format: "{value}". Example time format: "6:00 am".')
+    return string_to_time(value, require_am_pm)
+  elif isinstance(value, datetime.time):
+    return value.replace()
 
 def with_transformation_suffix(keys: List[str], suffix: str, transformer: lambda value: Any):
   def curried_transformer(dict: Dict[str, Any]) -> Dict[str, Any]:

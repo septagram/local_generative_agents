@@ -14,20 +14,46 @@
  limitations under the License.
  """
 
-from typing import Dict, Optional
+from persona.prompt_template.ResponseModel import ResponseModel, Field, validator
+from typing import Any, Dict, Optional
 
-from persona.prompt_template.InferenceStrategy import JSONType, OutputType, functor, InferenceStrategy
+from persona.prompt_template.InferenceStrategy import functor, InferenceStrategy
+
+class ActObjDescResponse(ResponseModel):
+  object: str = Field(..., description='object name')
+  user: str = Field(..., description="user's first name")
+  state: str = Field(..., description="description of the state the object is in")
+
+  @validator('object')
+  def object_name_match(cls, object: str, values: Dict[str, Any]):
+    if values['context']:
+      expected_object = values['context']['object_name']
+      if object.lower() != expected_object.lower():
+        raise ValueError(f"Object name mismatch: {expected_object} expected")
+    return object
+
+  @validator('user')
+  def user_name_match(cls, user: str, values: Dict[str, Any]):
+    if values['context']:
+      expected_name = values['context']['firstname']
+      if user.lower() != expected_name.lower():
+        raise ValueError(f"User name mismatch: {expected_name} expected")
+    return user
 
 @functor
 class run_gpt_prompt_act_obj_desc(InferenceStrategy):
-  output_type = OutputType.JSON
+  output_type = ActObjDescResponse
   config = {
     "max_tokens": 50,
     "temperature": 0,
     "top_p": 1,
   }
   prompt = """
-    We want to write an object description and to understand the state of an object that is being used by someone. For example, if Jack is fixing the generator, the description would state:
+    We want to write an object description and to understand the state of an object that is being used by someone.
+    
+    {format_instructions}
+
+    For example, if Jack is fixing the generator, the description would state:
 
     {{"object":"generator","user":"Jack","state":"being fixed"}}
 
@@ -41,21 +67,8 @@ class run_gpt_prompt_act_obj_desc(InferenceStrategy):
       "firstname": persona.scratch.get_str_firstname(),
     }
   
-  def validate_json(self, json: JSONType) -> Optional[str]:
-    # Check for the required fields in the JSON object
-    required_fields = ["object", "user", "state"]
-    for field in required_fields:
-      if field not in json:
-        return f"Missing field: {field}"
-    # Check if the "object" field matches the lowercased object_name property
-    if json["object"].lower() != self.context['object_name'].lower():
-      return "Object name mismatch"
-    # Check if the "object" field matches the lowercased object_name property
-    if json["user"] != self.context['firstname']:
-      return "Object name mismatch"
-  
-  def extract_json(self, json: JSONType) -> str:
-    return json['state']
+  def postprocess(self, response: ActObjDescResponse) -> str:
+    return response.state
   
   def fallback(self, act_game_object: str, act_desp: str, persona) -> str:
     return f'being used by {persona.scratch.get_str_firstname()}'

@@ -38,7 +38,7 @@ from langchain.globals import set_llm_cache
 from langchain.cache import SQLiteCache
 
 import utils as config
-from persona.prompt_template.SimplifiedPedanticOutputParser import SimplifiedPydanticOutputParser, JSONType, find_and_parse_json
+from persona.prompt_template.SimplifiedPedanticOutputParser import SimplifiedPydanticOutputParser
 from persona.prompt_template.embedding import LocalEmbeddings
 from persona.common import deindent
 
@@ -187,13 +187,9 @@ def functor(cls):
     return instance(*args)
   return infer
 
-class OutputType(Enum):
-  Text = auto()
-  JSON = auto()
-
 class InferenceStrategy:
   retries: int = 5
-  output_type: Union[type, OutputType] = OutputType.Text
+  output_type: type = str
   prompt: Optional[str] = None
   example_prompt: Optional[str] = ""
   config: Dict[str, Any] = {}
@@ -203,18 +199,10 @@ class InferenceStrategy:
   example_selector: BaseExampleSelector = NoExampleSelector()
 
   def __init__(self):
-    output_parser = self.output_parser()
-    format_instructions = (
-      output_parser.get_format_instructions()
-      if callable(getattr(output_parser, 'get_format_instructions', None))
-      else None
-    )
-
     @chain
     def prepare_context(args: List):
       self.context = self.prepare_context(*args)
-      if format_instructions:
-        self.context['format_instructions'] = format_instructions
+      self.context['format_instructions'] = self.output_parser(self.context).get_format_instructions()
       return self.context
 
     if self.examples:
@@ -246,69 +234,31 @@ class InferenceStrategy:
     self.chain = (
       announcer(self.__class__.__name__) |
       prepare_context |
-      fetch_examples |
-      wrap_prompt(self.prompt) |
-      with_retries(
-        retries=self.retries,
-        inference_chain=(
-          ColorEcho('light_blue') |
-          add_system_prompt |
-          model(ModelAlias.strong, self.config) |
-          ColorEcho('cyan')
-        ),
-        output_parser_chain=(
-          output_parser |
-          RunnableLambda(lambda result: self.postprocess(result)) |
-          ColorEcho('light_green', "Final output: {value}")
-        ),
-      )
+      RunnableLambda(lambda context: (
+        fetch_examples |
+        wrap_prompt(self.prompt) |
+        with_retries(
+          retries=self.retries,
+          inference_chain=(
+            ColorEcho('light_blue') |
+            add_system_prompt |
+            model(ModelAlias.strong, self.config) |
+            ColorEcho('cyan')
+          ),
+          output_parser_chain=(
+            self.output_parser(context) |
+            RunnableLambda(lambda result: self.postprocess(result)) |
+            ColorEcho('light_green', "Final output: {value}")
+          ),
+        )
+      ).invoke(context))
     )
 
   def prepare_context(self, *args: ArgsType) -> Dict[str, str]:
     return {}
   
-  def output_parser(self) -> BaseOutputParser:
-    if isinstance(self.output_type, OutputType):
-      @chain
-      def validate(llm_output: str) -> Union[JSONType, str]:
-        if self.output_type == OutputType.JSON:
-          json_output = find_and_parse_json(llm_output.content)
-          validation_error = self.validate_json(json_output)
-        elif self.output_type == OutputType.Text:
-          validation_error = self.validate_text(llm_output)
-        else:
-          raise ValueError(f"Unknown output type: {self.output_type}")
-        if validation_error is not None:
-          print(colored(f"Error in interaction with {self.__class__.__name__}: {str(validation_error)}", 'red'))
-          if '__traceback__' in validation_error:
-            traceback.print_exception(type(validation_error), validation_error, validation_error.__traceback__)
-          if config.strict_errors:
-            raise ValueError(validation_error)
-          else:
-            return self.fallback
-        return json_output or llm_output
-
-      extract = RunnableLambda(
-        self.extract_json
-        if self.output_type == OutputType.JSON
-        else self.extract_text
-      )
-
-      return validate | extract
-    else:
-      return SimplifiedPydanticOutputParser(pydantic_object=self.output_type)
-  
-  def validate_text(self, output: str) -> Optional[str]:
-    return None
-  
-  def validate_json(self, json: JSONType) -> Optional[str]:
-    return None
-
-  def extract_text(self, output: str) -> ReturnType:
-    return output
-  
-  def extract_json(self, json: JSONType) -> ReturnType:
-    return json
+  def output_parser(self, context: Dict[str, Any]) -> BaseOutputParser:
+    return SimplifiedPydanticOutputParser(pydantic_object=self.output_type, context=context)
   
   def postprocess(self, result: Any):
     return result

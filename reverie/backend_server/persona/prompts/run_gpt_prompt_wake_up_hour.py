@@ -15,13 +15,23 @@
  """
 
 import re
+import datetime
+from typing import Union
+from persona.prompt_template.ResponseModel import ResponseModel, Field, validator
 
-from persona.common import is_valid_time
-from persona.prompt_template.InferenceStrategy import JSONType, OutputType, functor, InferenceStrategy
+from persona.common import time_to_string, validate_time
+from persona.prompt_template.InferenceStrategy import functor, InferenceStrategy
 
+class WakeUpHourResponse(ResponseModel):
+  time: datetime.time = Field(description="wake up time with am/pm")
+
+  @validator('time', pre=True)
+  def parse_time(cls, time_string: Union[str, datetime.time]) -> datetime.time:
+    return validate_time('wake-up', time_string, False)
+  
 @functor
 class run_gpt_prompt_wake_up_hour(InferenceStrategy):
-  output_type = OutputType.JSON
+  output_type = WakeUpHourResponse
   config = {
     "max_tokens": 15,
     "temperature": 1,
@@ -44,14 +54,8 @@ class run_gpt_prompt_wake_up_hour(InferenceStrategy):
       "firstname": persona.scratch.get_str_firstname()
     }
 
-  def validate_json(self, json: JSONType):
-    if "time" not in json:
-      return "Missing time value"
-    if not is_valid_time(json['time'], require_am_pm=True) and not is_valid_time(json['time'], require_am_pm=False):
-      return "Invalid time format"
-
-  def extract_json(self, json: JSONType):
-    return re.search(r"^\s*([012]?\d:\d\d)\b", json['time']).group(1)
+  def postprocess(self, response: WakeUpHourResponse):
+    return time_to_string(response.time, False)
 
   def fallback(self, persona):
     return "08:00"

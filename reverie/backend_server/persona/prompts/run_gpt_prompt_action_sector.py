@@ -14,13 +14,13 @@
  limitations under the License.
  """
 
-from langchain_core.pydantic_v1 import BaseModel, Field
+from persona.prompt_template.ResponseModel import ResponseModel, Field
 
 from persona.prompt_template.InferenceStrategy import functor, InferenceStrategy
 from persona.common import with_json
 
-class ActionSectorResponse(BaseModel):
-  sector: str = Field(..., description="the Sector that this character should go to")
+class ActionSectorResponse(ResponseModel):
+  sector: str = Field(..., description="the Sector name that this character should go to, must be an exact match")
 
 with_json_transformer = with_json([
   'living_sector',
@@ -34,7 +34,7 @@ with_json_transformer = with_json([
 @functor
 class run_gpt_prompt_action_sector(InferenceStrategy):
   output_type = ActionSectorResponse
-  config =  {
+  config = {
     "temperature": 0.3,
   }
   example_prompt = """
@@ -47,7 +47,7 @@ class run_gpt_prompt_action_sector(InferenceStrategy):
     We need to choose an appropriate Sector for the task at hand.
 
     * Stay in the current sector if the activity can be done there. Only go out if the activity needs to take place in another place.
-    * Must be one of the sectors from "All Sectors," verbatim. It must be a Sector, and not an Arena.
+    * Must be one of the Sectors from "All Sectors," verbatim. It must be a Sector, and not an Arena.
     * If none of those fit very well, we must still choose the one that's the closest fit.
 
     {format_instructions}
@@ -87,10 +87,11 @@ class run_gpt_prompt_action_sector(InferenceStrategy):
   
   def postprocess(self, output: ActionSectorResponse):
     if output.sector not in self.context["all_sectors"]:
+      available_sectors = f"Select one of {self.context['all_sectors_json']}, verbatim."
       if output.sector in self.context["living_sector_arenas"] or output.sector in self.context["current_sector_arenas"]:
-        raise ValueError("Arena name was returned instead of the Sector name")
+        raise ValueError(f"Arena name was returned instead of the Sector name. {available_sectors}")
       else:
-        raise ValueError(f"Specified Sector doesn't exist or isn't available to {self.context['persona'].scratch.get_str_firstname()}")
+        raise ValueError(f"Specified Sector doesn't exist or isn't available to {self.context['persona'].scratch.get_str_firstname()}. {available_sectors}")
     return output.sector
   
   def fallback(self, action_description, persona, maze):

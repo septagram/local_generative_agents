@@ -23,6 +23,7 @@ from persona.prompts.run_gpt_prompt_wake_up_hour import run_gpt_prompt_wake_up_h
 from persona.prompts.run_gpt_prompt_daily_plan import run_gpt_prompt_daily_plan
 from persona.prompts.run_gpt_prompt_task_decomp import run_gpt_prompt_task_decomp
 from persona.prompts.run_gpt_prompt_action_sector import run_gpt_prompt_action_sector
+from persona.prompts.run_gpt_prompt_action_arena import run_gpt_prompt_action_arena
 from persona.prompts.run_gpt_prompt_act_obj_desc import run_gpt_prompt_act_obj_desc
 from persona.prompts.run_gpt_prompt_act_obj_event_triple import run_gpt_prompt_act_obj_event_triple
 
@@ -145,24 +146,6 @@ def generate_hourly_schedule(persona, wake_up_hour):
   
   # Return the mapped daily requirements
   return daily_req_mapped
-
-def generate_action_arena(act_desp, persona, maze, act_world, act_sector): 
-  """TODO 
-  Given the persona and the task description, choose the action_arena. 
-
-  Persona state: identity stable set, n-1 day schedule, daily plan
-
-  INPUT: 
-    act_desp: description of the new action (e.g., "sleeping")
-    persona: The Persona class instance 
-  OUTPUT: 
-    action_arena (e.g., "bedroom 2")
-  EXAMPLE OUTPUT: 
-    "bedroom 2"
-  """
-  if debug: print ("GNS FUNCTION: <generate_action_arena>")
-  return run_gpt_prompt_action_arena(act_desp, persona, maze, act_world, act_sector)[0]
-
 
 def generate_action_game_object(act_desp, act_address, persona, maze):
   """TODO
@@ -582,7 +565,7 @@ def _determine_action(persona, maze):
   act_world = maze.access_tile(persona.scratch.curr_tile)["world"]
   # act_sector = maze.access_tile(persona.scratch.curr_tile)["sector"]
   act_sector = run_gpt_prompt_action_sector(cur_item.task, persona, maze)
-  act_arena = generate_action_arena(cur_item.task, persona, maze, act_world, act_sector)
+  act_arena = run_gpt_prompt_action_arena(cur_item.task, persona, maze, act_world, act_sector)
   act_address = f"{act_world}:{act_sector}:{act_arena}"
   act_game_object = generate_action_game_object(cur_item.task, act_address,
                                                 persona, maze)

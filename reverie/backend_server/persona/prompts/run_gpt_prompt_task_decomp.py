@@ -15,43 +15,70 @@
  """
 
 import datetime
+from typing import List, Optional
+from persona.prompt_template.ResponseModel import ResponseModel, BaseModel, Field, validator, conlist
 
 from persona.common import HourlyScheduleItem
-from persona.prompt_template.InferenceStrategy import JSONType, OutputType, functor, InferenceStrategy
+from persona.prompt_template.InferenceStrategy import functor, InferenceStrategy
 
-# A few shot decomposition of a task given the task description 
-#
-# Persona state: identity stable set, curr_date_str, first_name
-#
-# INPUT: 
-#   persona: The Persona class instance 
-#   task: the description of the task at hand in str form
-#         (e.g., "waking up and starting her morning routine")
-#   duration: an integer that indicates the number of minutes this task is 
-#             meant to last (e.g., 60)
-# OUTPUT: 
-#   a list of list where the inner list contains the decomposed task 
-#   description and the number of minutes the task is supposed to last. 
-# EXAMPLE OUTPUT: 
-#   [['going to the bathroom', 5], ['getting dressed', 5], 
-#     ['eating breakfast', 15], ['checking her email', 5], 
-#     ['getting her supplies ready for the day', 15], 
-#     ['starting to work on her painting', 15]] 
+class TaskDecompSubtask(BaseModel):
+  i: int = Field(description='index, sequential number representing the order of the subtask')
+  action: str = Field(..., description='brief description of the subtask being performe')
+  duration: int = Field(..., description='time allocated for this subtask, in minutes', min=1)
+  timeLeft: Optional[int] = Field(description="remaining time until the activity's completion, in minutes", min=0)
+
+class TaskDecompResponse(ResponseModel):
+  subtasks: conlist(item_type=TaskDecompSubtask, min_items=1) = Field(..., description='list of subtasks')
+
+  @validator('subtasks')
+  def evenly_split_duration(cls, subtasks: List[TaskDecompSubtask], values) -> Optional[List[TaskDecompSubtask]]:
+    if values['context']:
+      total_duration = sum(subtask.duration for subtask in subtasks)
+      expected_duration = values['context']['duration']
+      if total_duration != expected_duration:
+        adjustment_ratio = expected_duration / total_duration
+        return [
+          TaskDecompSubtask(
+            i=subtask.i,
+            action=subtask.action,
+            duration=int(round(subtask.duration * adjustment_ratio))
+          )
+          for subtask in subtasks
+        ]
+    return subtasks
+
+"""
+A few shot decomposition of a task given the task description.
+
+Persona state: identity stable set, curr_date_str, first_name.
+
+INPUT: 
+  persona: The Persona class instance.
+  task: the description of the task at hand in str form
+        (e.g., "waking up and starting her morning routine").
+  duration: an integer that indicates the number of minutes this task is 
+            meant to last (e.g., 60).
+OUTPUT: 
+  a list of list where the inner list contains the decomposed task 
+  description and the number of minutes the task is supposed to last. 
+EXAMPLE OUTPUT: 
+  [['going to the bathroom', 5], ['getting dressed', 5], 
+    ['eating breakfast', 15], ['checking her email', 5], 
+    ['getting her supplies ready for the day', 15], 
+    ['starting to work on her painting', 15]] 
+"""
 @functor
 class run_gpt_prompt_task_decomp(InferenceStrategy):
-  output_type = OutputType.JSON
+  output_type = TaskDecompResponse
   config = {
     "max_tokens": 1000,
     "temperature": 0.5,
     "top_p": 1,
   }
   prompt = """
-    Let's perform task decomposition, breaking down a larger activity into smaller, manageable subtasks. Each subtask will be detailed in a JSON array, providing a structured and clear view of the task's components. The JSON object for each subtask will include the following fields:
+    Let's perform task decomposition, breaking down a larger activity into smaller, manageable subtasks.
 
-    - i (or "index"): A sequential number representing the order of the subtask.
-    - action: A brief description of the subtask being performed.
-    - duration: The time allocated for this subtask, in minutes.
-    - timeLeft: The remaining time until the activity's completion, in minutes.
+    {format_instructions}
 
     Here's an example of how it can be done:
 
@@ -126,22 +153,8 @@ class run_gpt_prompt_task_decomp(InferenceStrategy):
       "duration": schedule_item.duration
     }
 
-  def validate_json(self, json: JSONType):
-    if not isinstance(json, list):
-      return "Invalid JSON format (expected a JSON array)"
-    if not all(isinstance(item, dict) and 'action' in item and 'duration' in item for item in json):
-      return "Invalid JSON format (expected an array of objects with 'action' and 'duration' fields)"
-    if not all(isinstance(item['duration'], (int, float)) for item in json):
-      return "Invalid JSON format (the 'duration' field must be a number)"
-
-  def extract_json(self, json: JSONType):
-    total_duration = sum(subtask['duration'] for subtask in json)
-    expected_duration = self.schedule_item.duration
-    if total_duration != expected_duration:
-      adjustment_ratio = expected_duration / total_duration
-      return [[subtask['action'], int(subtask['duration'] * adjustment_ratio)] for subtask in json]
-    else:
-      return [[subtask['action'], subtask['duration']] for subtask in json]
+  def postprocess(self, response: TaskDecompResponse):
+    return [[subtask.action, subtask.duration] for subtask in response.subtasks]
 
   def fallback(self, persona, schedule_item):
     return [[schedule_item.task, schedule_item.duration]]

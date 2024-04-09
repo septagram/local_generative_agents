@@ -17,33 +17,25 @@
 from typing import List, Union
 from random import Random
 from datetime import time
-from langchain_core.pydantic_v1 import BaseModel, Field, validator, conlist
+from persona.prompt_template.ResponseModel import ResponseModel, BaseModel, Field, validator, conlist
 
-from persona.common import is_valid_time, string_to_time, time_to_string
+from persona.common import time_to_string, validate_time
 from persona.prompt_template.InferenceStrategy import functor, InferenceStrategy
 
 class DailyPlanItem(BaseModel):
   start: time = Field(description="start time with am/pm")
   end: time = Field(description="end time with am/pm")
   activity: str = Field(description=f"the activity persona is performing, in plain text")
-  @staticmethod
-  def validate_time(field_name: str, value: Union[str, time]) -> time:
-    if isinstance(value, str):
-      if not is_valid_time(value):
-        raise ValueError(f'Invalid {field_name} time format: "{value}". Example time format: "6:00 am".')
-      return string_to_time(value)
-    elif isinstance(value, time):
-      return value.replace()
 
   @validator('start', pre=True)
   def parse_start(cls, time_string: Union[str, time]) -> time:
-    return cls.validate_time('start', time_string)
+    return validate_time('start', time_string)
 
   @validator('end', pre=True)
   def parse_end(cls, time_string: Union[str, time]) -> time:
-    return cls.validate_time('end', time_string)
+    return validate_time('end', time_string)
 
-class DailyPlanResponse(BaseModel):
+class DailyPlanResponse(ResponseModel):
   activities: conlist(item_type=DailyPlanItem, min_items=1) = Field(description="list of activities for today")
 
   @validator('activities')
