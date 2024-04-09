@@ -51,14 +51,16 @@ class SimplifiedPydanticOutputParser(PydanticOutputParser):
   context: Dict[str, Any] = {}
 
   def parse_result(self, result: List[Generation], *, partial: bool = False) -> Any:
-    json_object = find_and_parse_json(result[0].text)
     try:
+      json_object = find_and_parse_json(result[0].text)
       json_object['context'] = self.context
       return self.pydantic_object.parse_obj(json_object)
+    except json.JSONDecodeError as json_error:
+      raise OutputParserException(f'Invalid JSON: {str(json_error)} (position relative to the start of JSON)', llm_output=result[0].text)
     except ValidationError as errors_object:
       msg = '\n'.join(
         [
-          f"- {error['msg']}: (root){''.join(map(lambda field: f'[{field}]' if field is int else f'.{field}', error['loc']))}"
+          f"- {error['msg'] or error['msg_template'].format(error)}: (root){''.join(map(lambda field: f'[{field}]' if isinstance(field, int) or field.isdigit() else f'.{field}', error['loc']))}"
           for error in errors_object.errors()
         ]
       )

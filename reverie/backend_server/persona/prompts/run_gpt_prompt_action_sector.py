@@ -14,13 +14,27 @@
  limitations under the License.
  """
 
-from persona.prompt_template.ResponseModel import ResponseModel, Field
+from typing import Any, Dict
+from persona.prompt_template.ResponseModel import ResponseModel, Field, validator
 
 from persona.prompt_template.InferenceStrategy import functor, InferenceStrategy
 from persona.common import with_json
 
 class ActionSectorResponse(ResponseModel):
   sector: str = Field(..., description="the Sector name that this character should go to, must be an exact match")
+
+  @validator('sector')
+  def is_available_sector(cls, sector: str, values: Dict[str, Any]):
+    if values['context']:
+      context = values.get('context')
+      all_sectors_array = context.get('all_sectors')
+      if sector not in all_sectors_array:
+        available_sectors = f"Select one of {all_sectors_array}, verbatim."
+        if sector in context["living_sector_arenas"] or sector in context["current_sector_arenas"]:
+          raise ValueError(f"Arena name was returned instead of the Sector name. {available_sectors}")
+        else:
+          raise ValueError(f"Specified Sector doesn't exist or isn't available to {context['persona'].scratch.get_str_firstname()}. {available_sectors}")
+    return sector
 
 with_json_transformer = with_json([
   'living_sector',
@@ -85,13 +99,7 @@ class run_gpt_prompt_action_sector(InferenceStrategy):
       "all_sectors": [sector for sector in known_sectors if "'s house" not in sector or persona.scratch.last_name in sector],
     })
   
-  def postprocess(self, output: ActionSectorResponse):
-    if output.sector not in self.context["all_sectors"]:
-      available_sectors = f"Select one of {self.context['all_sectors_json']}, verbatim."
-      if output.sector in self.context["living_sector_arenas"] or output.sector in self.context["current_sector_arenas"]:
-        raise ValueError(f"Arena name was returned instead of the Sector name. {available_sectors}")
-      else:
-        raise ValueError(f"Specified Sector doesn't exist or isn't available to {self.context['persona'].scratch.get_str_firstname()}. {available_sectors}")
+  def postprocess(self, output: ActionSectorResponse) -> str:
     return output.sector
   
   def fallback(self, action_description, persona, maze):
@@ -132,6 +140,6 @@ class run_gpt_prompt_action_sector(InferenceStrategy):
         "Harvey Oak Supply Store",
         "The Willows Market and Pharmacy",
       ],
-      "output": ActionSectorResponse(sector="Johnson Park").json()
+      "output": ActionSectorResponse(sector="Hobbs Cafe").json()
     }),
   ]

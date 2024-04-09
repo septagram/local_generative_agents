@@ -152,7 +152,7 @@ def with_retries(retries: int, inference_chain: Runnable, output_parser_chain: R
 
       {error}
 
-      Let's correct our reply.
+      Step by step, let's correct our reply.
   """
 
   @chain
@@ -163,8 +163,7 @@ def with_retries(retries: int, inference_chain: Runnable, output_parser_chain: R
       output = inference_chain.invoke(current_prompt)
       try:
         return output_parser_chain.invoke(output)
-      except Exception as error:
-
+      except OutputParserException as error:
         current_prompt = ChatPromptValue(
           messages = (
             (current_prompt.messages if config.do_retry_with_full_history else prompt.messages) +
@@ -172,7 +171,7 @@ def with_retries(retries: int, inference_chain: Runnable, output_parser_chain: R
             wrap_prompt(retry_prompt).format_messages(error=error)
           )
         )
-    raise OutputParserException("Out of retries")
+    raise OutputParserException(f"Out of retries, last error: {current_prompt.messages[-1].content}")
   return chain_with_retries
 
 class NoExampleSelector(BaseExampleSelector):
